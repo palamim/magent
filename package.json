@@ -1,0 +1,20 @@
+{
+  "name": "magent",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "Palamim",
+  "type": "module",
+  "main": "propose.ts",
+  "scripts": {
+    "magent": "tsx propose.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.103.0",
+    "dotenv": "17.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.2",
+    "typescript": "6.0.3"
+  }
+}
