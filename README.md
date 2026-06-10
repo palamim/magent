@@ -14,6 +14,8 @@ npm run magent -- /path/to/your/project
 
 1. Walks the project directory, collecting source files (`.ts`, `.js`, `.tsx`, `.jsx`, `.css`, `.md`, `.json`, `.astro`)
 2. Sends the codebase to `claude-haiku-4-5`
-3. Prints one file path, one change, one reason
+3. Prints one proposal, one file path, the before and after
+4. Asks if you wanna apply the change (y/n)
+5. If 'y' is typed, the change is made
 
 That's it.
