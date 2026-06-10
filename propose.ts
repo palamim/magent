@@ -10,6 +10,7 @@ import {
 import { createInterface } from 'node:readline/promises';
 import { execSync } from 'node:child_process';
 import { extname, join } from 'node:path';
+import { diffLines } from 'diff';
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.vscode', '.astro']);
 const SOURCE_EXTS = new Set([
@@ -109,12 +110,28 @@ if (!existsSync(proposal.path)) {
 }
 const current = readFileSync(proposal.path, 'utf8');
 
-// Logs
-console.log('\nType:', proposal.type);
-console.log('File:', proposal.path);
-console.log('\nProposal:', proposal.description);
-console.log('\n--- BEFORE ---\n' + current);
-console.log('\n--- AFTER ---\n' + proposal.newContent);
+const CYAN = '\x1b[36m';
+const BOLD = '\x1b[1m';
+const RED = '\x1b[31m';
+const GREEN = '\x1b[32m';
+const DIM = '\x1b[2m';
+const RESET = '\x1b[0m';
+
+console.log(`\n${CYAN}${BOLD}Type:${RESET} ${proposal.type}`);
+console.log(`${CYAN}${BOLD}File:${RESET} ${proposal.path}`);
+console.log(`${CYAN}${BOLD}Proposal:${RESET} ${proposal.description}`);
+console.log('\n--- DIFF ---');
+
+const normalize = (s: string) => s.replace(/\n+$/, '') + '\n';
+const changes = diffLines(normalize(current), normalize(proposal.newContent));
+for (const part of changes) {
+  const lines = part.value.replace(/\n$/, '').split('\n');
+  for (const line of lines) {
+    if (part.added) console.log(`${GREEN}+ ${line}${RESET}`);
+    else if (part.removed) console.log(`${RED}- ${line}${RESET}`);
+    else console.log(`${DIM}  ${line}${RESET}`);
+  }
+}
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 const answer = await rl.question(
