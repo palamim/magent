@@ -36,9 +36,11 @@ const collectFiles = (
   return acc;
 };
 
-const target = process.argv[2];
+const target = process.argv[2] ?? process.env['MAGENT_PROJECT_PATH'];
 if (!target) {
-  console.error('Usage: node propose.ts <path-to-project>');
+  console.error(
+    'Usage: node propose.ts <path-to-project>  (or set MAGENT_PROJECT_PATH in .env)',
+  );
   process.exit(1);
 }
 
