@@ -83,7 +83,15 @@ const messages: Anthropic.MessageParam[] = [
               Honor everything the intent says, including anything it tells you to avoid.
               Prefer something real and shippable over something grand.
               Read whatever files you need using the read_file tool to understand the project, then propose one next step.
-              Start by reading a file.
+              Start by reading some files.
+              When you have explored enough, end your response with a JSON object in exactly this shape (you may include brief reasoning before it):
+              {
+                "description": "<one sentence: what the next step is and why>",
+                "type": "<one of: feat, fix, chore, refactor, style, docs>",
+                "targetFiles": ["<absolute path of each file that must be CHANGED>"],
+                "contextFiles": ["<absolute path of each file the executor should READ for context but not change>"],
+                "instructions": "<clear, specific description of what the executor must do, file by file>"
+              }
 
               --- INTENT ---
               ${intent || '(no intent file provided)'}
@@ -92,6 +100,14 @@ const messages: Anthropic.MessageParam[] = [
               ${fileList}`,
   },
 ];
+
+let workOrder: {
+  description: string;
+  type: string;
+  targetFiles: string[];
+  contextFiles: string[];
+  instructions: string;
+} | null = null;
 
 let steps = 0;
 const MAX_STEPS = 10;
@@ -110,8 +126,20 @@ while (steps < MAX_STEPS) {
   });
 
   if (message.stop_reason !== 'tool_use') {
-    console.log('\nFinished looping.');
-    console.log(message.content);
+    const lastBlock = message.content.filter((b) => b.type === 'text').pop();
+    const text = lastBlock && lastBlock.type === 'text' ? lastBlock.text : '';
+
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) {
+      console.error('No JSON work order found:\n', text);
+      process.exit(1);
+    }
+    try {
+      workOrder = JSON.parse(match[0]);
+    } catch {
+      console.error('Could not parse work order JSON:\n', match[0]);
+      process.exit(1);
+    }
     break;
   }
 
@@ -151,3 +179,15 @@ while (steps < MAX_STEPS) {
 
   console.log(`Step ${steps}: model requested ${toolContent.length} file(s)`);
 }
+
+if (!workOrder) {
+  console.error('Loop ended without a work order (hit MAX_STEPS).');
+  process.exit(1);
+}
+
+console.log('\n--- WORK ORDER ---');
+console.log('Type:', workOrder.type);
+console.log('Description:', workOrder.description);
+console.log('Target files:', workOrder.targetFiles);
+console.log('Context files:', workOrder.contextFiles);
+console.log('Instructions:', workOrder.instructions);

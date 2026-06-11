@@ -27,6 +27,11 @@ npm run magent -- /some/other/project   # override with any path
 
 ## Status
 
-Magent is mid-build. Right now it **explores and proposes** — it does not yet apply changes. Applying the proposal (diff, branch, commit) is being reconnected to the new agentic loop. Earlier versions applied changes directly; that flow is being rebuilt on top of the loop.
+Magent is mid-build, and works in two stages:
+
+1. **Planner** _(working)_ — an agent explores the codebase, reading whatever files it needs, then produces a structured _work order_: what to change, which files to touch, which to read for context, and detailed instructions.
+2. **Executor** _(next)_ — will take the work order, generate the actual file changes, and show them all as diffs for approval before anything is written to disk.
+
+Right now Magent runs the planner and prints the work order. The executor and the approve-then-write flow are being built next. Nothing is written to disk yet.
 
 That's it.
