@@ -1,16 +1,7 @@
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
-import { createInterface } from 'node:readline/promises';
-import { execSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
-import { diffLines } from 'diff';
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.vscode', '.astro']);
 const SOURCE_EXTS = new Set([
@@ -33,10 +24,7 @@ if (!target) {
   process.exit(1);
 }
 
-const collectFiles = (
-  dir: string,
-  acc: { path: string; content: string }[] = [],
-) => {
+const collectFiles = (dir: string, acc: { path: string }[] = []) => {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     const stats = statSync(full);
@@ -46,139 +34,120 @@ const collectFiles = (
       SOURCE_EXTS.has(extname(entry)) &&
       stats.size <= MAX_FILE_BYTES
     ) {
-      acc.push({ path: full, content: readFileSync(full, 'utf8') });
+      acc.push({ path: full });
     }
   }
   return acc;
 };
 
 const files = collectFiles(target);
-const codebase = files
-  .map((f) => `--- ${f.path} ---\n${f.content}`)
-  .join('\n\n');
+
 const intentPath = join(target, 'magent.md');
 const intent = existsSync(intentPath) ? readFileSync(intentPath, 'utf8') : '';
-if (!intent) {
-  console.log('No magent.md found — proposing without project intent.');
-}
+const intentLog = intent
+  ? 'magent.md found — proposing with project intent.'
+  : 'No magent.md found — proposing without project intent.';
 
-console.log(`Read ${files.length} files from ${target}`);
-console.log('Asking the model for one change...');
+console.log(intentLog);
 
-const client = new Anthropic();
-const message = await client.messages.create({
-  max_tokens: 4096,
-  model: 'claude-haiku-4-5',
-  messages: [
-    {
-      role: 'user',
-      content: `You are a thinking partner for a builder, proposing the next step for their project.
+console.log('\nAsking the model for one change...');
 
-Below is the project's INTENT — whatever the builder wants you to know about it — followed by the project's CODE.
+const fileList = files.map((f) => f.path).join('\n');
 
-Propose ONE concrete next step that advances the project in the spirit of the intent. It could be a feature, a craft improvement, or a meaningful evolution. Honor everything the intent says, including anything it tells you to avoid. Prefer something real and shippable over something grand.
-
-Respond ONLY with a JSON object, no markdown fences, no prose, in this exact shape:
-{
-  "path": "<absolute file path of the file to change>",
-  "type": "<one of: feat, fix, chore, refactor, style, docs>",
-  "slug": "<short kebab-case description>",
-  "description": "<one sentence: what the next step is and why it advances the direction>",
-  "newContent": "<the COMPLETE new contents of that file with your change applied>"
-}
-
---- INTENT ---
-${intent || '(no intent file provided)'}
-
---- CODE ---
-${codebase}`,
+const readFileTool: Anthropic.Tool = {
+  name: 'read_file',
+  description:
+    'Reads the full contents of a single source file in the project. Use this to inspect a file before proposing changes to it. Call it whenever you need to see what a file actually contains.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      path: {
+        type: 'string',
+        description:
+          'The absolute path of the file to read, exactly as listed in the available files.',
+      },
     },
-  ],
-});
-
-const block = message.content[0];
-const raw = block && block.type === 'text' ? block.text : '';
-const cleaned = raw
-  .replace(/^```json\s*/, '')
-  .replace(/```\s*$/, '')
-  .trim();
-
-let proposal: {
-  path: string;
-  type: string;
-  slug: string;
-  description: string;
-  newContent: string;
+    required: ['path'],
+  },
 };
 
-try {
-  proposal = JSON.parse(cleaned);
-} catch {
-  console.error('Model did not return valid JSON:\n', raw);
-  process.exit(1);
-}
-if (!existsSync(proposal.path)) {
-  console.error(`Model proposed a path that doesn't exist: ${proposal.path}`);
-  process.exit(1);
-}
-const current = readFileSync(proposal.path, 'utf8');
+const client = new Anthropic();
 
-const CYAN = '\x1b[36m';
-const BOLD = '\x1b[1m';
-const RED = '\x1b[31m';
-const GREEN = '\x1b[32m';
-const DIM = '\x1b[2m';
-const RESET = '\x1b[0m';
+const messages: Anthropic.MessageParam[] = [
+  {
+    role: 'user',
+    content: `You are a thinking partner for a builder, proposing the next step for their project.
+              Below is the project's INTENT — whatever the builder wants you to know about it — followed by the project's FILE LIST.
+              Propose ONE concrete next step that advances the project in the spirit of the intent.
+              It could be a feature, a craft improvement, or a meaningful evolution.
+              Honor everything the intent says, including anything it tells you to avoid.
+              Prefer something real and shippable over something grand.
+              Read whatever files you need using the read_file tool to understand the project, then propose one next step.
+              Start by reading a file.
 
-console.log(`\n${CYAN}${BOLD}Type:${RESET} ${proposal.type}`);
-console.log(`${CYAN}${BOLD}File:${RESET} ${proposal.path}`);
-console.log(`${CYAN}${BOLD}Proposal:${RESET} ${proposal.description}`);
-console.log('\n--- DIFF ---');
+              --- INTENT ---
+              ${intent || '(no intent file provided)'}
 
-const normalize = (s: string) => s.replace(/\n+$/, '') + '\n';
-const changes = diffLines(normalize(current), normalize(proposal.newContent));
-for (const part of changes) {
-  const lines = part.value.replace(/\n$/, '').split('\n');
-  for (const line of lines) {
-    if (part.added) console.log(`${GREEN}+ ${line}${RESET}`);
-    else if (part.removed) console.log(`${RED}- ${line}${RESET}`);
-    else console.log(`${DIM}  ${line}${RESET}`);
+              --- FILE LIST ---
+              ${fileList}`,
+  },
+];
+
+let steps = 0;
+const MAX_STEPS = 10;
+while (steps < MAX_STEPS) {
+  steps++;
+  const message = await client.messages.create({
+    max_tokens: 4096,
+    model: 'claude-haiku-4-5',
+    tools: [readFileTool],
+    messages: messages,
+  });
+
+  messages.push({
+    role: 'assistant',
+    content: message.content,
+  });
+
+  if (message.stop_reason !== 'tool_use') {
+    console.log('\nFinished looping.');
+    console.log(message.content);
+    break;
   }
-}
 
-const rl = createInterface({ input: process.stdin, output: process.stdout });
-const answer = await rl.question(
-  '\nCommit this change to a new branch? (y/n) ',
-);
-rl.close();
-
-if (answer.trim().toLowerCase() === 'y') {
-  const safeSlug = proposal.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-  const branch = `${proposal.type}/${safeSlug}`;
-  const commitMessage = `${proposal.type}: ${proposal.description}`;
-
-  const run = (cmd: string) =>
-    execSync(cmd, { cwd: target, stdio: 'pipe' }).toString();
-
-  run(`git checkout -b ${branch}`);
-  writeFileSync(proposal.path, proposal.newContent, 'utf8');
-  run(`git add ${JSON.stringify(proposal.path)}`);
-  run(`git commit -m ${JSON.stringify(commitMessage)}`);
-
-  const rl2 = createInterface({ input: process.stdin, output: process.stdout });
-  const open = await rl2.question('Open the branch? (vscode / ghostty / no) ');
-  rl2.close();
-
-  if (open.trim().toLowerCase() === 'vscode') {
-    execSync(`code .`, { cwd: target });
-    console.log(`Opened VS Code on ${branch}. You're on the branch.`);
-  } else if (open.trim().toLowerCase() === 'ghostty') {
-    execSync(`open -a Ghostty ${JSON.stringify(target)}`);
-    console.log(`Opened Ghostty on ${branch}.`);
-  } else {
-    run(`git checkout -`);
-    console.log(`Committed to branch ${branch}. Back on main.`);
+  if (message.content[0] && message.content[0].type === 'text') {
+    console.log('');
+    console.log(message.content[0].text);
   }
-} else {
-  console.log('Skipped.');
+
+  interface ReadFileInput {
+    path: string;
+  }
+
+  const toolContent: Anthropic.ContentBlockParam[] = message.content
+    .filter((block) => block.type === 'tool_use')
+    .map((tool_request) => {
+      const input = tool_request.input as ReadFileInput;
+      if (existsSync(input.path)) {
+        const fileContent = readFileSync(input.path, 'utf-8');
+        return {
+          type: 'tool_result',
+          tool_use_id: tool_request.id,
+          content: fileContent,
+        };
+      }
+      return {
+        type: 'tool_result',
+        tool_use_id: tool_request.id,
+        content: 'PathError: file path does not exist.',
+        is_error: true,
+      };
+    });
+
+  messages.push({
+    role: 'user',
+    content: toolContent,
+  });
+
+  console.log(`Step ${steps}: model requested ${toolContent.length} file(s)`);
 }
