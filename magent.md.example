@@ -1,0 +1,15 @@
+# Project intent for Magent
+
+Tell Magent whatever helps it propose good next steps. There's no required format —
+write what's true for your project. Some things worth including:
+
+- What this project is, and what it's built with
+- The direction good next steps should move toward
+- Anything Magent should NOT propose (guardrails)
+- Your taste, if it matters to how the work should feel
+
+Example:
+
+This is a minimalist CLI tool for X, built in TypeScript. Good next steps make it
+faster and keep it dependency-light. Don't add a config system or a plugin
+architecture — I want it to stay small. Keep the code readable over clever.

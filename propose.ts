@@ -56,6 +56,11 @@ const files = collectFiles(target);
 const codebase = files
   .map((f) => `--- ${f.path} ---\n${f.content}`)
   .join('\n\n');
+const intentPath = join(target, 'magent.md');
+const intent = existsSync(intentPath) ? readFileSync(intentPath, 'utf8') : '';
+if (!intent) {
+  console.log('No magent.md found — proposing without project intent.');
+}
 
 console.log(`Read ${files.length} files from ${target}`);
 console.log('Asking the model for one change...');
@@ -67,17 +72,25 @@ const message = await client.messages.create({
   messages: [
     {
       role: 'user',
-      content: `You are reviewing a codebase. Find ONE small, safe, concrete improvement — a leftover console.log, a dead variable, a tiny cleanup. Not a big refactor.
+      content: `You are a thinking partner for a builder, proposing the next step for their project.
+
+Below is the project's INTENT — whatever the builder wants you to know about it — followed by the project's CODE.
+
+Propose ONE concrete next step that advances the project in the spirit of the intent. It could be a feature, a craft improvement, or a meaningful evolution. Honor everything the intent says, including anything it tells you to avoid. Prefer something real and shippable over something grand.
 
 Respond ONLY with a JSON object, no markdown fences, no prose, in this exact shape:
 {
-  "path": "<absolute file path exactly as given>",
+  "path": "<absolute file path of the file to change>",
   "type": "<one of: feat, fix, chore, refactor, style, docs>",
-  "slug": "<short kebab-case description, e.g. remove-dead-rss-log>",
-  "description": "<one sentence: what and why>",
+  "slug": "<short kebab-case description>",
+  "description": "<one sentence: what the next step is and why it advances the direction>",
   "newContent": "<the COMPLETE new contents of that file with your change applied>"
 }
 
+--- INTENT ---
+${intent || '(no intent file provided)'}
+
+--- CODE ---
 ${codebase}`,
     },
   ],
