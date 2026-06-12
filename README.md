@@ -27,11 +27,11 @@ npm run magent -- /some/other/project   # override with any path
 
 ## Status
 
-Magent is mid-build, and works in two stages:
+Magent is mid-build, and works in stages:
 
-1. **Planner** _(working)_ — an agent explores the codebase, reading whatever files it needs, then produces a structured _work order_: what to change, which files to touch, which to read for context, and detailed instructions.
-2. **Executor** _(next)_ — will take the work order, generate the actual file changes, and show them all as diffs for approval before anything is written to disk.
-
-Right now Magent runs the planner and prints the work order. The executor and the approve-then-write flow are being built next. Nothing is written to disk yet.
+1. **Planner** _(working)_ — a Haiku agent explores the codebase, reading whatever files it needs, then produces a structured _work order_: what to change, which files to touch, which to read for context, and detailed instructions.
+2. **Executor** _(working)_ — a Sonnet agent takes the work order and generates the actual file changes.
+3. **Review** _(working)_ — every change is shown as a colored, GitHub-style diff (new files and surgical edits to existing ones) for you to inspect.
+4. **Write** _(next)_ — approving the changes and writing them to disk. Not built yet, so **nothing is written to disk** — Magent currently explores, plans, generates, and shows you the diffs to review.
 
 That's it.
