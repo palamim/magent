@@ -1,4 +1,4 @@
-# magent — point it at a codebase, get the next step
+# Magent — Point it at a codebase and it proposes, implements, and commits one next step to a new branch for you to review and keep.
 
 You give it a folder. It explores your project reading the files it decides are relevant then proposes **one concrete next step** that advances where the project is headed. Grounded in your intent.
 
@@ -17,21 +17,16 @@ npm run magent              # uses MAGENT_PROJECT_PATH from .env
 npm run magent -- /some/other/project   # override with any path
 ```
 
-## What it does
+## How it works
 
-1. Picks the target: `MAGENT_PROJECT_PATH` from `.env` or the path you pass
-2. Reads `magent.md` (the project's intent) if present
-3. Lists the project's source files (`.ts`, `.js`, `.tsx`, `.jsx`, `.css`, `.md`, `.json`, `.astro`) and hands that list to the model
-4. The model explores agentically — it calls a `read_file` tool to read whatever files it needs, in as many rounds as it takes, deciding what to read next based on what it has learned
-5. Once it understands the project, it proposes one grounded next step
+Magent runs as a five-stage pipeline:
 
-## Status
+1. **Planner** — a Haiku agent explores the codebase. It's handed the list of source files (`.ts`, `.js`, `.tsx`, `.jsx`, `.css`, `.md`, `.json`, `.astro`), then uses a `read_file` tool to read whatever it needs, in as many rounds as it takes, deciding what to read next based on what it has learned. Once it understands the project, it produces a structured _work order_: what to change, which files to touch, which to read for context, and detailed instructions — grounded in your `magent.md`.
+2. **Executor** — a Sonnet agent takes the work order and generates the actual file changes.
+3. **Review** — every change is shown as a colored, GitHub-style diff (new files and surgical edits to existing ones).
+4. **Apply** — changes are written to a new git branch (`type/slug`) and committed, leaving your `main` untouched.
+5. **Inspect** — Magent offers to open the branch in VS Code or Ghostty so you can run it and check the result, or finish and return to `main`.
 
-Magent is mid-build, and works in stages:
-
-1. **Planner** _(working)_ — a Haiku agent explores the codebase, reading whatever files it needs, then produces a structured _work order_: what to change, which files to touch, which to read for context, and detailed instructions.
-2. **Executor** _(working)_ — a Sonnet agent takes the work order and generates the actual file changes.
-3. **Review** _(working)_ — every change is shown as a colored, GitHub-style diff (new files and surgical edits to existing ones) for you to inspect.
-4. **Write** _(next)_ — approving the changes and writing them to disk. Not built yet, so **nothing is written to disk** — Magent currently explores, plans, generates, and shows you the diffs to review.
+Magent does not edit your working files directly — every change lands on its own branch for you to keep, refine, or discard.
 
 That's it.

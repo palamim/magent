@@ -1,8 +1,10 @@
 // ---- imports ----
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createInterface } from 'node:readline/promises';
+import { execSync } from 'node:child_process';
+import { extname, join, dirname } from 'node:path';
 import { diffLines } from 'diff';
 // --------
 
@@ -20,6 +22,7 @@ interface Intent {
 interface WorkOrder {
   description: string;
   type: string;
+  slug: string;
   targetFiles: string[];
   contextFiles: string[];
   instructions: string;
@@ -71,6 +74,14 @@ const loadIntent = (dir: string): Intent => {
   };
 };
 
+const resolvePath = (returnedPath: string, workOrder: WorkOrder): string | null => {
+  if (workOrder.targetFiles.includes(returnedPath)) return returnedPath;
+  const match = workOrder.targetFiles.find(
+    (t) => t.endsWith(returnedPath) || t.endsWith(returnedPath.replace(/^\//, '/')),
+  );
+  return match ?? null;
+};
+
 const runPlanner = async (files: string[], intent: string, client: Anthropic): Promise<WorkOrder> => {
   const fileList = files.join('\n');
   const messages: Anthropic.MessageParam[] = [
@@ -91,6 +102,7 @@ const runPlanner = async (files: string[], intent: string, client: Anthropic): P
                 {
                   "description": "<one sentence: what the next step is and why>",
                   "type": "<one of: feat, fix, chore, refactor, style, docs>",
+                  "slug": "<short kebab-case description, e.g. remove-dead-rss-log>",
                   "targetFiles": ["<absolute path of each file that must be CHANGED>"],
                   "contextFiles": ["<absolute path of each file the executor should READ for context but not change>"],
                   "instructions": "<clear, specific description of what the executor must do, file by file>"
@@ -267,15 +279,6 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Cha
 };
 
 const showDiffs = (workOrder: WorkOrder, changes: Change[]) => {
-  const resolvePath = (returnedPath: string): string | null => {
-    if (workOrder!.targetFiles.includes(returnedPath)) return returnedPath;
-    const match = workOrder!.targetFiles.find(
-      (t) => t.endsWith(returnedPath) || t.endsWith(returnedPath.replace(/^\//, '/')),
-    );
-    return match ?? null;
-  };
-
-  // --- show all diffs ---
   const RED = '\x1b[31m';
   const GREEN = '\x1b[32m';
   const DIM = '\x1b[2m';
@@ -288,7 +291,7 @@ const showDiffs = (workOrder: WorkOrder, changes: Change[]) => {
   console.log(`\n${BOLD}${changes.length} file(s) to change:${RESET}\n`);
 
   for (const change of changes) {
-    const realPath = resolvePath(change.path);
+    const realPath = resolvePath(change.path, workOrder);
     if (!realPath) {
       console.error(`Executor returned a path not in the work order: ${change.path}`);
       continue;
@@ -344,6 +347,45 @@ const showDiffs = (workOrder: WorkOrder, changes: Change[]) => {
   }
 };
 
+const applyChanges = async (dir: string, workOrder: WorkOrder, changes: Change[]) => {
+  const safeSlug = workOrder.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const branch = `${workOrder.type}/${safeSlug}`;
+  const commitMessage = `${workOrder.type}: ${workOrder.description}`;
+
+  const run = (cmd: string) => execSync(cmd, { cwd: dir, stdio: 'pipe' }).toString();
+
+  run(`git checkout -b ${branch}`);
+
+  for (const change of changes) {
+    const realPath = resolvePath(change.path, workOrder);
+    if (!realPath) {
+      console.error(`Skipping unresolvable path: ${change.path}`);
+      continue;
+    }
+    mkdirSync(dirname(realPath), { recursive: true });
+    writeFileSync(realPath, change.newContent, 'utf8');
+    run(`git add ${JSON.stringify(realPath)}`);
+  }
+  run(`git commit -m ${JSON.stringify(commitMessage)}`);
+
+  console.log(`Committed "${workOrder.description}" to branch ${branch}`);
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const open = await rl.question('Open the branch? (vscode / ghostty / no) ');
+  rl.close();
+
+  if (open.trim().toLowerCase() === 'vscode') {
+    execSync(`code .`, { cwd: dir });
+    console.log(`Opened VS Code on ${branch}. You're on the branch.`);
+  } else if (open.trim().toLowerCase() === 'ghostty') {
+    execSync(`open -a Ghostty ${JSON.stringify(dir)}`);
+    console.log(`Opened Ghostty on ${branch}.`);
+  } else {
+    run(`git checkout -`);
+    console.log(`Committed to branch ${branch}. Back on main.`);
+  }
+};
+
 // ---- main ----
 const main = async () => {
   const client = new Anthropic();
@@ -362,6 +404,7 @@ const main = async () => {
   const workOrder = await runPlanner(files, intent.text, client);
   const changes = await runExecutor(workOrder, client);
   showDiffs(workOrder, changes);
+  await applyChanges(target, workOrder, changes);
 };
 
 main();
