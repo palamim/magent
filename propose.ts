@@ -82,6 +82,9 @@ const runPlanner = async (files: string[], intent: string, client: Anthropic): P
                 It could be a feature, a craft improvement, or a meaningful evolution.
                 Honor everything the intent says, including anything it tells you to avoid.
                 Prefer something real and shippable over something grand.
+                Prefer changes that touch 1-3 files. A good next step is small enough
+                to review and ship in a single sitting. If a worthwhile step seems to
+                need many files, pick the smallest valuable slice of it.
                 Read whatever files you need using the read_file tool to understand the project, then propose one next step.
                 Start by reading some files.
                 When you have explored enough, end your response with a JSON object in exactly this shape (you may include brief reasoning before it):
@@ -217,6 +220,11 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Cha
   
                 Return an ARRAY containing Objects with the path and the newContent only for the changed files in exactly this shape:
                 [{ "path": "...", "newContent": "..." }, ...]
+
+                Change ONLY what the instructions require. Preserve all existing
+                formatting, imports, spacing, and any code you are not explicitly
+                changing. Return each file as its complete new contents, but with
+                minimal, surgical edits — do not reformat or restructure untouched code.
   
                 --- DESCRIPTION ---
                 ${description}
@@ -235,7 +243,7 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Cha
   console.log('\nExecuting the work order...');
   const execMessage = await client.messages.create({
     max_tokens: 8192,
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-4-6',
     messages: workMessage,
   });
 
