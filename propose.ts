@@ -6,12 +6,18 @@ import { createInterface } from 'node:readline/promises';
 import { execSync } from 'node:child_process';
 import { extname, join, dirname } from 'node:path';
 import { diffLines } from 'diff';
-// --------
 
 // ---- constants (SKIP_DIRS, etc.) ----
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.vscode', '.astro']);
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.md', '.json', '.astro']);
 const MAX_FILE_BYTES = 50_000;
+const BOLD = '\x1b[1m',
+  DIM = '\x1b[2m',
+  CYAN = '\x1b[36m',
+  GREEN = '\x1b[32m',
+  YELLOW = '\x1b[33m',
+  RESET = '\x1b[0m',
+  RED = '\x1b[31m';
 
 // ---- types ----
 interface Intent {
@@ -33,6 +39,11 @@ interface Change {
   newContent: string;
 }
 
+interface Attempt {
+  changes: Change[];
+  errors: string;
+}
+
 // ---- tools ----
 const readFileTool: Anthropic.Tool = {
   name: 'read_file',
@@ -51,6 +62,8 @@ const readFileTool: Anthropic.Tool = {
 };
 
 // ---- helper functions (collectProjectFiles, runPlanner, runExecutor, showDiffs...) ----
+const phase = (label: string) => console.log(`\n${BOLD}${CYAN}▸ ${label}${RESET}`);
+
 const collectProjectFiles = (dir: string, acc: string[] = []) => {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -86,6 +99,7 @@ const resolvePath = (returnedPath: string, workOrder: WorkOrder, dir: string): s
 };
 
 const runPlanner = async (files: string[], intent: string, client: Anthropic): Promise<WorkOrder> => {
+  phase('Planning');
   const fileList = files.join('\n');
   const messages: Anthropic.MessageParam[] = [
     {
@@ -202,7 +216,7 @@ const runPlanner = async (files: string[], intent: string, client: Anthropic): P
   return workOrder;
 };
 
-const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Change[]> => {
+const runExecutor = async (workOrder: WorkOrder, client: Anthropic, attempts: Attempt[]): Promise<Change[]> => {
   const description = workOrder.description;
   const instructions = workOrder.instructions;
 
@@ -225,6 +239,14 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Cha
 
   const contextBlock = workOrder.contextFiles.length ? formatFiles(contextFiles) : '(none)';
   const targetBlock = formatFiles(targetFiles);
+  const attemptsBlock = attempts.length
+    ? attempts
+        .map((a, i) => {
+          const code = a.changes.map((c) => `--- ${c.path} ---\n${c.newContent}`).join('\n\n');
+          return `### Attempt ${i + 1}\nYou produced this code:\n${code}\n\nIt failed typecheck with these errors:\n${a.errors}`;
+        })
+        .join('\n\n---\n\n')
+    : '(none — this is your first attempt)';
 
   const workMessage: Anthropic.MessageParam[] = [
     {
@@ -256,7 +278,15 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Cha
                 ${targetBlock}
   
                 --- INSTRUCTIONS ---
-                ${instructions}`,
+                ${instructions}
+                
+                When ATTEMPTS contains previous tries, each shows the code you produced and the
+                typecheck errors it caused. Study the errors, find what's wrong in that specific
+                code, and fix it. Build on your previous attempt — do not start over with a
+                different approach.
+
+                --- ATTEMPTS ---
+                ${attemptsBlock}`,
     },
   ];
 
@@ -289,14 +319,84 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Cha
   return changes;
 };
 
-const showDiffs = (workOrder: WorkOrder, changes: Change[], dir: string) => {
-  const RED = '\x1b[31m';
-  const GREEN = '\x1b[32m';
-  const DIM = '\x1b[2m';
-  const CYAN = '\x1b[36m';
-  const BOLD = '\x1b[1m';
-  const RESET = '\x1b[0m';
+const run = (cmd: string, dir: string) => execSync(cmd, { cwd: dir, stdio: 'pipe' }).toString();
 
+const typecheck = (dir: string): { ok: boolean; errors: string } => {
+  try {
+    execSync('npx tsc --noEmit', { cwd: dir, stdio: 'pipe' });
+    return { ok: true, errors: '' };
+  } catch (err: any) {
+    return { ok: false, errors: err.stdout?.toString() ?? err.message };
+  }
+};
+
+const cleanup = (dir: string, branch: string) => {
+  run(`git checkout .`, dir);
+  run(`git clean -fd`, dir);
+  run(`git checkout -`, dir);
+  run(`git branch -D ${branch}`, dir);
+};
+
+const runVerifiedExecution = async (
+  workOrder: WorkOrder,
+  client: Anthropic,
+  dir: string,
+): Promise<{ changes: Change[]; branch: string; writtenPaths: string[]; originals: Map<string, string | null> }> => {
+  const safeSlug = workOrder.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const branch = `${workOrder.type}/${safeSlug}`;
+  run(`git checkout -b ${branch}`, dir);
+
+  const originals = new Map<string, string | null>();
+  for (const t of workOrder.targetFiles) {
+    originals.set(t, existsSync(t) ? readFileSync(t, 'utf8') : null);
+  }
+
+  let attempts: Attempt[] = [];
+  let steps = 0;
+  const MAX_STEPS = 3;
+  while (steps < MAX_STEPS) {
+    steps++;
+    phase(`Executing (attempt ${steps}/${MAX_STEPS})`);
+    const changes = await runExecutor(workOrder, client, attempts);
+    const resolved = changes.map((c) => ({ change: c, realPath: resolvePath(c.path, workOrder, dir) }));
+    const unresolved = resolved.filter((r) => r.realPath === null);
+    if (unresolved.length) {
+      console.error(`\nAborting — these paths could not be resolved:`);
+      for (const u of unresolved) console.error(`  ${u.change.path}`);
+      cleanup(dir, branch);
+      process.exit(1);
+    }
+    for (const { change, realPath } of resolved) {
+      mkdirSync(dirname(realPath!), { recursive: true });
+      writeFileSync(realPath!, change.newContent, 'utf8');
+    }
+    const { ok, errors } = typecheck(dir);
+    if (ok) {
+      console.log(`\n${GREEN}✓ Typecheck passed ${RESET}`);
+      const writtenPaths = resolved.map((r) => r.realPath!);
+      return {
+        changes,
+        branch,
+        writtenPaths,
+        originals,
+      };
+    }
+    if (!ok) {
+      console.log(`\n${YELLOW}✗ Typecheck failed — feeding ${errors.split('\\n').length} errors back ${RESET}`);
+      attempts.push({
+        changes: changes,
+        errors: errors,
+      });
+    }
+  }
+
+  console.log(`\n${YELLOW}Gave up after ${MAX_STEPS} attempts. Branch discarded. ${RESET}`);
+  cleanup(dir, branch);
+  console.error("Couldn't produce valid code, nothing committed");
+  process.exit(1);
+};
+
+const showDiffs = (workOrder: WorkOrder, changes: Change[], dir: string, originals: Map<string, string | null>) => {
   const normalize = (s: string) => s.replace(/\n+$/, '') + '\n';
 
   console.log(`\n${BOLD}${CYAN}── PROPOSAL ──${RESET}`);
@@ -310,7 +410,8 @@ const showDiffs = (workOrder: WorkOrder, changes: Change[], dir: string) => {
       console.error(`${RED}Executor returned a path not in the work order: ${change.path}${RESET}`);
       continue;
     }
-    const isNew = !existsSync(realPath);
+    const original = originals.get(realPath);
+    const isNew = original === null || original === undefined;
     if (isNew) {
       console.log(`${CYAN}${BOLD}NEW FILE:${RESET} ${realPath}`);
       const lines = change.newContent.replace(/\n$/, '').split('\n');
@@ -319,8 +420,7 @@ const showDiffs = (workOrder: WorkOrder, changes: Change[], dir: string) => {
       }
     } else {
       console.log(`${CYAN}${BOLD}MODIFIED:${RESET} ${realPath}`);
-      const current = readFileSync(realPath, 'utf-8');
-      const parts = diffLines(normalize(current), normalize(change.newContent));
+      const parts = diffLines(normalize(original), normalize(change.newContent));
       const CONTEXT = 3;
 
       parts.forEach((part, i) => {
@@ -361,30 +461,12 @@ const showDiffs = (workOrder: WorkOrder, changes: Change[], dir: string) => {
   }
 };
 
-const applyChanges = async (dir: string, workOrder: WorkOrder, changes: Change[]) => {
-  const resolved = changes.map((c) => ({ change: c, realPath: resolvePath(c.path, workOrder, dir) }));
-  const unresolved = resolved.filter((r) => r.realPath === null);
-  if (unresolved.length) {
-    console.error(`\nAborting — these paths could not be resolved, so the change would be incomplete:`);
-    for (const u of unresolved) console.error(`  ${u.change.path}`);
-    console.error(`Nothing was written. Re-run to try again.`);
-    return;
-  }
-
-  const safeSlug = workOrder.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-  const branch = `${workOrder.type}/${safeSlug}`;
+const applyChanges = async (dir: string, workOrder: WorkOrder, branch: string, writtenPaths: string[]) => {
   const commitMessage = `${workOrder.type}: ${workOrder.description}`;
-
-  const run = (cmd: string) => execSync(cmd, { cwd: dir, stdio: 'pipe' }).toString();
-
-  run(`git checkout -b ${branch}`);
-
-  for (const { change, realPath } of resolved) {
-    mkdirSync(dirname(realPath!), { recursive: true });
-    writeFileSync(realPath!, change.newContent, 'utf8');
-    run(`git add ${JSON.stringify(realPath!)}`);
+  for (const p of writtenPaths) {
+    run(`git add ${JSON.stringify(p)}`, dir);
   }
-  run(`git commit -m ${JSON.stringify(commitMessage)}`);
+  run(`git commit -m ${JSON.stringify(commitMessage)}`, dir);
 
   console.log(`\nCommitted "${workOrder.description}" to branch ${branch}`);
 
@@ -399,7 +481,7 @@ const applyChanges = async (dir: string, workOrder: WorkOrder, changes: Change[]
     execSync(`open -a Ghostty ${JSON.stringify(dir)}`);
     console.log(`Opened Ghostty on ${branch}.`);
   } else {
-    run(`git checkout -`);
+    run(`git checkout -`, dir);
     console.log(`Committed to branch ${branch}. Back on main.`);
   }
 };
@@ -417,12 +499,11 @@ const main = async () => {
   const files = collectProjectFiles(target);
   const intent = loadIntent(target);
   console.log(intent.isThereIntent ? 'Using magent.md as intent.' : 'No magent.md found — proposing without intent.');
-  console.log('\nAsking the model for one change...');
 
   const workOrder = await runPlanner(files, intent.text, client);
-  const changes = await runExecutor(workOrder, client);
-  showDiffs(workOrder, changes, target);
-  await applyChanges(target, workOrder, changes);
+  const { changes, branch, writtenPaths, originals } = await runVerifiedExecution(workOrder, client, target);
+  showDiffs(workOrder, changes, target, originals);
+  await applyChanges(target, workOrder, branch, writtenPaths);
 };
 
 main();
