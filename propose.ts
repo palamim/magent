@@ -74,10 +74,13 @@ const loadIntent = (dir: string): Intent => {
   };
 };
 
-const resolvePath = (returnedPath: string, workOrder: WorkOrder): string | null => {
+const resolvePath = (returnedPath: string, workOrder: WorkOrder, dir: string): string | null => {
   if (workOrder.targetFiles.includes(returnedPath)) return returnedPath;
+  // relative path → resolve against project dir
+  const asAbsolute = returnedPath.startsWith('/') ? returnedPath : join(dir, returnedPath);
+  if (workOrder.targetFiles.includes(asAbsolute)) return asAbsolute;
   const match = workOrder.targetFiles.find(
-    (t) => t.endsWith(returnedPath) || t.endsWith(returnedPath.replace(/^\//, '/')),
+    (t) => t.endsWith(returnedPath) || t.endsWith('/' + returnedPath.replace(/^\/+/, '')),
   );
   return match ?? null;
 };
@@ -185,7 +188,10 @@ const runPlanner = async (files: string[], intent: string, client: Anthropic): P
       content: toolContent,
     });
 
-    console.log(`Step ${steps}: model requested ${toolContent.length} file(s)`);
+    const requested = message.content
+      .filter((b) => b.type === 'tool_use')
+      .map((t) => (t.input as { path: string }).path.split('/').pop());
+    console.log(`  ↳ reading: ${requested.join(', ')}`);
   }
 
   if (!workOrder) {
@@ -230,8 +236,10 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Cha
                 - TARGET FILES: Path and content of files you might change acording to instructions
                 - INSTRUCTIONS: Clear, specific description of what you must do, file by file
   
-                Return an ARRAY containing Objects with the path and the newContent only for the changed files in exactly this shape:
-                [{ "path": "...", "newContent": "..." }, ...]
+                ALWAYS return the JSON array, even when changing only ONE file.
+                A single-file change is still an array with one object:
+                [{ "path": "...", "newContent": "..." }]
+                Do NOT return raw code blocks or prose-only responses. The array is required.
 
                 Change ONLY what the instructions require. Preserve all existing
                 formatting, imports, spacing, and any code you are not explicitly
@@ -264,7 +272,10 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Cha
 
   const execMatch = execText.match(/\[[\s\S]*\]/);
   if (!execMatch) {
-    console.error('No JSON array found in executor output:\n', execText);
+    console.error('\n\x1b[31mExecutor did not return a JSON array.\x1b[0m');
+    console.error(
+      '\x1b[2mThis usually happens on single-file changes — the model returned raw code instead. Re-run to try again.\x1b[0m',
+    );
     process.exit(1);
   }
 
@@ -278,7 +289,7 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic): Promise<Cha
   return changes;
 };
 
-const showDiffs = (workOrder: WorkOrder, changes: Change[]) => {
+const showDiffs = (workOrder: WorkOrder, changes: Change[], dir: string) => {
   const RED = '\x1b[31m';
   const GREEN = '\x1b[32m';
   const DIM = '\x1b[2m';
@@ -288,12 +299,15 @@ const showDiffs = (workOrder: WorkOrder, changes: Change[]) => {
 
   const normalize = (s: string) => s.replace(/\n+$/, '') + '\n';
 
+  console.log(`\n${BOLD}${CYAN}── PROPOSAL ──${RESET}`);
+  console.log(`${BOLD}${workOrder.type}:${RESET} ${workOrder.description}\n`);
+  console.log(`${DIM}${workOrder.instructions}${RESET}`);
   console.log(`\n${BOLD}${changes.length} file(s) to change:${RESET}\n`);
 
   for (const change of changes) {
-    const realPath = resolvePath(change.path, workOrder);
+    const realPath = resolvePath(change.path, workOrder, dir);
     if (!realPath) {
-      console.error(`Executor returned a path not in the work order: ${change.path}`);
+      console.error(`${RED}Executor returned a path not in the work order: ${change.path}${RESET}`);
       continue;
     }
     const isNew = !existsSync(realPath);
@@ -343,11 +357,20 @@ const showDiffs = (workOrder: WorkOrder, changes: Change[]) => {
         }
       });
     }
-    console.log(''); // blank line between files
+    console.log('');
   }
 };
 
 const applyChanges = async (dir: string, workOrder: WorkOrder, changes: Change[]) => {
+  const resolved = changes.map((c) => ({ change: c, realPath: resolvePath(c.path, workOrder, dir) }));
+  const unresolved = resolved.filter((r) => r.realPath === null);
+  if (unresolved.length) {
+    console.error(`\nAborting — these paths could not be resolved, so the change would be incomplete:`);
+    for (const u of unresolved) console.error(`  ${u.change.path}`);
+    console.error(`Nothing was written. Re-run to try again.`);
+    return;
+  }
+
   const safeSlug = workOrder.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const branch = `${workOrder.type}/${safeSlug}`;
   const commitMessage = `${workOrder.type}: ${workOrder.description}`;
@@ -356,19 +379,14 @@ const applyChanges = async (dir: string, workOrder: WorkOrder, changes: Change[]
 
   run(`git checkout -b ${branch}`);
 
-  for (const change of changes) {
-    const realPath = resolvePath(change.path, workOrder);
-    if (!realPath) {
-      console.error(`Skipping unresolvable path: ${change.path}`);
-      continue;
-    }
-    mkdirSync(dirname(realPath), { recursive: true });
-    writeFileSync(realPath, change.newContent, 'utf8');
-    run(`git add ${JSON.stringify(realPath)}`);
+  for (const { change, realPath } of resolved) {
+    mkdirSync(dirname(realPath!), { recursive: true });
+    writeFileSync(realPath!, change.newContent, 'utf8');
+    run(`git add ${JSON.stringify(realPath!)}`);
   }
   run(`git commit -m ${JSON.stringify(commitMessage)}`);
 
-  console.log(`Committed "${workOrder.description}" to branch ${branch}`);
+  console.log(`\nCommitted "${workOrder.description}" to branch ${branch}`);
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const open = await rl.question('Open the branch? (vscode / ghostty / no) ');
@@ -403,7 +421,7 @@ const main = async () => {
 
   const workOrder = await runPlanner(files, intent.text, client);
   const changes = await runExecutor(workOrder, client);
-  showDiffs(workOrder, changes);
+  showDiffs(workOrder, changes, target);
   await applyChanges(target, workOrder, changes);
 };
 
