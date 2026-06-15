@@ -431,7 +431,7 @@ const runVerifiedExecution = async (
     const { ok, errors } = typecheck(dir);
     if (ok) {
       console.log(`\n${GREEN}✓ Typecheck passed ${RESET}`);
-      const commitMessage = `${workOrder.type}: ${workOrder.description}`;
+      const commitMessage = `${workOrder.type}: ${workOrder.description}\n\nCo-Authored-By: Magent <magent@noreply.local>`;
       run(`git add -A`, dir);
       if (feedback.length === 0) {
         run(`git commit -m ${JSON.stringify(commitMessage)}`, dir);
