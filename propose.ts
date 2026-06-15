@@ -1,7 +1,7 @@
 // ---- imports ----
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { extname, join, dirname } from 'node:path';
 import { diffLines } from 'diff';
@@ -42,6 +42,14 @@ interface Change {
 interface Attempt {
   changes: Change[];
   errors: string;
+}
+
+interface Outcome {
+  timestamp: string;
+  proposal: string;
+  action: 'approve' | 'discard';
+  feedback: string[];
+  note: string;
 }
 
 // ---- tools ----
@@ -112,9 +120,10 @@ const readFiles = (paths: string[]) =>
 const formatFiles = (fileArr: { path: string; content: string }[]) =>
   fileArr.map((f) => `--- ${f.path} ---\n${f.content}`).join('\n\n');
 
-const runPlanner = async (files: string[], intent: string, client: Anthropic): Promise<WorkOrder> => {
+const runPlanner = async (files: string[], intent: string, client: Anthropic, dir: string): Promise<WorkOrder> => {
   phase('Planning');
   const fileList = files.join('\n');
+  const history = loadHistory(dir);
   const messages: Anthropic.MessageParam[] = [
     {
       role: 'user',
@@ -153,7 +162,14 @@ const runPlanner = async (files: string[], intent: string, client: Anthropic): P
                 ${intent}
   
                 --- FILE LIST ---
-                ${fileList}`,
+                ${fileList}
+                
+                --- HISTORY (what you've proposed before and how the builder reacted) ---
+                Use this to avoid re-proposing things the builder discarded, and to build on
+                directions they approved. If they discarded something, do not propose it again
+                unless their note suggests it was only "not now." If they approved and noted a
+                direction, lean into it.
+                ${history}`,
     },
   ];
 
@@ -582,14 +598,65 @@ const executeAndRefine = async (workOrder: WorkOrder, client: Anthropic, dir: st
         break;
 
       case 'approve':
+        const approveNote = await input({
+          message: 'Approved. Any note on this direction for next time? (enter to skip)',
+        });
+        recordOutcome(dir, {
+          timestamp: new Date().toISOString(),
+          proposal: `${workOrder.slug}: ${workOrder.description}`,
+          action: 'approve',
+          feedback,
+          note: approveNote,
+        });
         await finish(dir, branch);
         return;
 
       case 'discard':
+        const discardNote = await input({
+          message: 'Why discard? Magent will remember. (enter to skip)',
+        });
+        recordOutcome(dir, {
+          timestamp: new Date().toISOString(),
+          proposal: `${workOrder.slug}: ${workOrder.description}`,
+          action: 'discard',
+          feedback,
+          note: discardNote,
+        });
         cleanup(dir, branch);
         return;
     }
   }
+};
+
+const recordOutcome = (dir: string, outcome: Outcome) => {
+  const magentDir = join(dir, '.magent');
+  mkdirSync(magentDir, { recursive: true });
+  const gi = join(magentDir, '.gitignore');
+  if (!existsSync(gi)) writeFileSync(gi, '*\n!.gitignore\n', 'utf8');
+  const line = JSON.stringify(outcome) + '\n';
+  appendFileSync(join(magentDir, 'history.jsonl'), line, 'utf8');
+};
+
+const loadHistory = (dir: string): string => {
+  const historyPath = join(dir, '.magent', 'history.jsonl');
+  if (!existsSync(historyPath)) return '(no history yet — this is the first session)';
+  const lines = readFileSync(historyPath, 'utf8').trim().split('\n').filter(Boolean);
+  return lines
+    .map((line) => {
+      const o = JSON.parse(line) as Outcome;
+      const refined = o.feedback.length ? ` After refinements: ${o.feedback.join('; ')}.` : '';
+
+      if (o.action === 'approve') {
+        const note = o.note ? ` Builder noted: "${o.note}".` : '';
+        return `- Approved "${o.proposal}".${refined}${note}`;
+      }
+
+      if (o.note) {
+        return `- Discarded "${o.proposal}" — builder said: "${o.note}".${refined}`;
+      }
+      return `- Discarded "${o.proposal}" (no reason given).${refined}`;
+    })
+    .join('\n');
 };
 
 // ---- main ----
@@ -606,7 +673,7 @@ const main = async () => {
   const intent = loadIntent(target);
   console.log(intent.isThereIntent ? 'Using magent.md as intent.' : 'No magent.md found — proposing without intent.');
 
-  const workOrder = await runPlanner(files, intent.text, client);
+  const workOrder = await runPlanner(files, intent.text, client, target);
   await executeAndRefine(workOrder, client, target);
 };
 
