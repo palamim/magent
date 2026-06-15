@@ -2,10 +2,10 @@
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
-import { createInterface } from 'node:readline/promises';
 import { execSync } from 'node:child_process';
 import { extname, join, dirname } from 'node:path';
 import { diffLines } from 'diff';
+import { input, select } from '@inquirer/prompts';
 
 // ---- constants (SKIP_DIRS, etc.) ----
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.vscode', '.astro']);
@@ -97,6 +97,20 @@ const resolvePath = (returnedPath: string, workOrder: WorkOrder, dir: string): s
   );
   return match ?? null;
 };
+
+const readFiles = (paths: string[]) =>
+  paths
+    .filter((p) => {
+      if (!existsSync(p)) {
+        console.error(`Skipping missing file: ${p}`);
+        return false;
+      }
+      return true;
+    })
+    .map((p) => ({ path: p, content: readFileSync(p, 'utf-8') }));
+
+const formatFiles = (fileArr: { path: string; content: string }[]) =>
+  fileArr.map((f) => `--- ${f.path} ---\n${f.content}`).join('\n\n');
 
 const runPlanner = async (files: string[], intent: string, client: Anthropic): Promise<WorkOrder> => {
   phase('Planning');
@@ -216,29 +230,85 @@ const runPlanner = async (files: string[], intent: string, client: Anthropic): P
   return workOrder;
 };
 
-const runExecutor = async (workOrder: WorkOrder, client: Anthropic, attempts: Attempt[]): Promise<Change[]> => {
-  const description = workOrder.description;
-  const instructions = workOrder.instructions;
+const buildImplementPrompt = (
+  workOrder: WorkOrder,
+  targetBlock: string,
+  contextBlock: string,
+  attemptsBlock: string,
+): string => `You are a senior software engineer for a builder, implementing the next step for their project.
 
-  const readFiles = (paths: string[]) =>
-    paths
-      .filter((p) => {
-        if (!existsSync(p)) {
-          console.error(`Skipping missing file: ${p}`);
-          return false;
-        }
-        return true;
-      })
-      .map((p) => ({ path: p, content: readFileSync(p, 'utf-8') }));
+Your job: implement the work order below by editing the TARGET FILES. Below you'll find:
+- DESCRIPTION: a one-line summary of what you're implementing
+- INSTRUCTIONS: the specific, step-by-step description of what to do, file by file
+- TARGET FILES: the files you may change, with their current content
+- CONTEXT FILES: files for reference only — read them to understand the project, but do NOT change them
+- ATTEMPTS: previous tries of this same task that failed typecheck, if any
 
+Implement the instructions faithfully. Change only what the instructions require; preserve all
+existing formatting, imports, and code you aren't explicitly changing. Return each changed file as
+its complete new contents with minimal, surgical edits — do not reformat or restructure untouched code.
+
+ALWAYS return a JSON array, even for a single file: [{ "path": "...", "newContent": "..." }]
+Do NOT return raw code blocks or prose. The array is required.
+
+--- DESCRIPTION ---
+${workOrder.description}
+
+--- INSTRUCTIONS ---
+${workOrder.instructions}
+
+--- TARGET FILES ---
+${targetBlock}
+
+--- CONTEXT FILES ---
+${contextBlock}
+
+--- ATTEMPTS (typecheck failures to fix) ---
+${attemptsBlock}`;
+
+const buildRefinePrompt = (
+  workOrder: WorkOrder,
+  targetBlock: string,
+  attemptsBlock: string,
+  feedbackBlock: string,
+): string => `You are a senior software engineer for a builder, refining code you previously wrote for them.
+
+The builder reviewed the current code and asked for specific changes. Your job is NOT to re-implement
+the original task — it is already done. Your only job is to make the changes the builder requested,
+and nothing else. Below you'll find:
+- CURRENT FILES: the exact current state of every file in play — this is what you are editing
+- REQUESTED CHANGES: what the builder wants changed, in order (later items win on conflict)
+- BACKGROUND: the original work order, for context only — do NOT re-execute it
+- ATTEMPTS: previous tries of this refinement that failed typecheck, if any
+
+Rules:
+- Make ONLY the changes the builder requested. Locate the relevant code in CURRENT FILES and change it.
+- Leave everything else in the files exactly as it is — same formatting, imports, structure, spacing.
+- Return ONLY the files you actually change. If a requested change is already satisfied, do nothing for it.
+- If the builder asks to revert or restore something, look at the BACKGROUND and CURRENT FILES to
+  understand the prior state, and return it to what they describe.
+
+ALWAYS return a JSON array, even for a single file: [{ "path": "...", "newContent": "..." }]
+Do NOT return raw code blocks or prose. The array is required.
+
+--- CURRENT FILES ---
+${targetBlock}
+
+--- REQUESTED CHANGES (most recent last) ---
+${feedbackBlock}
+
+--- BACKGROUND (original task — do NOT re-execute, context only) ---
+${workOrder.instructions}
+
+--- ATTEMPTS (typecheck failures to fix) ---
+${attemptsBlock}`;
+
+const buildPrompt = (workOrder: WorkOrder, feedback: string[], attempts: Attempt[]): string => {
   const contextFiles = readFiles(workOrder.contextFiles);
   const targetFiles = readFiles(workOrder.targetFiles);
-
-  const formatFiles = (fileArr: { path: string; content: string }[]) =>
-    fileArr.map((f) => `--- ${f.path} ---\n${f.content}`).join('\n\n');
-
   const contextBlock = workOrder.contextFiles.length ? formatFiles(contextFiles) : '(none)';
   const targetBlock = formatFiles(targetFiles);
+  const feedbackBlock = feedback.length ? feedback.map((f, i) => `${i + 1}. ${f}`).join('\n') : '(none)';
   const attemptsBlock = attempts.length
     ? attempts
         .map((a, i) => {
@@ -248,45 +318,18 @@ const runExecutor = async (workOrder: WorkOrder, client: Anthropic, attempts: At
         .join('\n\n---\n\n')
     : '(none — this is your first attempt)';
 
+  const prompt = feedback.length
+    ? buildRefinePrompt(workOrder, targetBlock, attemptsBlock, feedbackBlock)
+    : buildImplementPrompt(workOrder, targetBlock, contextBlock, attemptsBlock);
+
+  return prompt;
+};
+
+const runExecutor = async (client: Anthropic, prompt: string): Promise<Change[]> => {
   const workMessage: Anthropic.MessageParam[] = [
     {
       role: 'user',
-      content: `You are a senior software engineer for a builder, implementing the next step for their project.
-                Below you'll find:
-                - DESCRIPTION: What you'll implement
-                - CONTEXT FILES: Path and content of files you should read for context but not change
-                - TARGET FILES: Path and content of files you might change acording to instructions
-                - INSTRUCTIONS: Clear, specific description of what you must do, file by file
-  
-                ALWAYS return the JSON array, even when changing only ONE file.
-                A single-file change is still an array with one object:
-                [{ "path": "...", "newContent": "..." }]
-                Do NOT return raw code blocks or prose-only responses. The array is required.
-
-                Change ONLY what the instructions require. Preserve all existing
-                formatting, imports, spacing, and any code you are not explicitly
-                changing. Return each file as its complete new contents, but with
-                minimal, surgical edits — do not reformat or restructure untouched code.
-  
-                --- DESCRIPTION ---
-                ${description}
-  
-                --- CONTEXT FILES ---
-                ${contextBlock}
-  
-                --- TARGET FILES ---
-                ${targetBlock}
-  
-                --- INSTRUCTIONS ---
-                ${instructions}
-                
-                When ATTEMPTS contains previous tries, each shows the code you produced and the
-                typecheck errors it caused. Study the errors, find what's wrong in that specific
-                code, and fix it. Build on your previous attempt — do not start over with a
-                different approach.
-
-                --- ATTEMPTS ---
-                ${attemptsBlock}`,
+      content: prompt,
     },
   ];
 
@@ -341,11 +384,9 @@ const runVerifiedExecution = async (
   workOrder: WorkOrder,
   client: Anthropic,
   dir: string,
-): Promise<{ changes: Change[]; branch: string; writtenPaths: string[]; originals: Map<string, string | null> }> => {
-  const safeSlug = workOrder.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-  const branch = `${workOrder.type}/${safeSlug}`;
-  run(`git checkout -b ${branch}`, dir);
-
+  branch: string,
+  feedback: string[] = [],
+): Promise<{ originals: Map<string, string | null> }> => {
   const originals = new Map<string, string | null>();
   for (const t of workOrder.targetFiles) {
     originals.set(t, existsSync(t) ? readFileSync(t, 'utf8') : null);
@@ -357,7 +398,8 @@ const runVerifiedExecution = async (
   while (steps < MAX_STEPS) {
     steps++;
     phase(`Executing (attempt ${steps}/${MAX_STEPS})`);
-    const changes = await runExecutor(workOrder, client, attempts);
+    const prompt = buildPrompt(workOrder, feedback, attempts);
+    const changes = await runExecutor(client, prompt);
     const resolved = changes.map((c) => ({ change: c, realPath: resolvePath(c.path, workOrder, dir) }));
     const unresolved = resolved.filter((r) => r.realPath === null);
     if (unresolved.length) {
@@ -373,19 +415,21 @@ const runVerifiedExecution = async (
     const { ok, errors } = typecheck(dir);
     if (ok) {
       console.log(`\n${GREEN}✓ Typecheck passed ${RESET}`);
-      const writtenPaths = resolved.map((r) => r.realPath!);
-      return {
-        changes,
-        branch,
-        writtenPaths,
-        originals,
-      };
+      const commitMessage = `${workOrder.type}: ${workOrder.description}`;
+      run(`git add -A`, dir);
+      if (feedback.length === 0) {
+        run(`git commit -m ${JSON.stringify(commitMessage)}`, dir);
+      } else {
+        run(`git commit --amend -m ${JSON.stringify(commitMessage)}`, dir);
+      }
+
+      return { originals };
     }
     if (!ok) {
       console.log(`\n${YELLOW}✗ Typecheck failed — feeding ${errors.split('\\n').length} errors back ${RESET}`);
       attempts.push({
-        changes: changes,
-        errors: errors,
+        changes,
+        errors,
       });
     }
   }
@@ -396,31 +440,36 @@ const runVerifiedExecution = async (
   process.exit(1);
 };
 
-const showDiffs = (workOrder: WorkOrder, changes: Change[], dir: string, originals: Map<string, string | null>) => {
+const showDiffs = (workOrder: WorkOrder, originals: Map<string, string | null>) => {
   const normalize = (s: string) => s.replace(/\n+$/, '') + '\n';
 
   console.log(`\n${BOLD}${CYAN}── PROPOSAL ──${RESET}`);
   console.log(`${BOLD}${workOrder.type}:${RESET} ${workOrder.description}\n`);
   console.log(`${DIM}${workOrder.instructions}${RESET}`);
-  console.log(`\n${BOLD}${changes.length} file(s) to change:${RESET}\n`);
 
-  for (const change of changes) {
-    const realPath = resolvePath(change.path, workOrder, dir);
-    if (!realPath) {
-      console.error(`${RED}Executor returned a path not in the work order: ${change.path}${RESET}`);
-      continue;
-    }
-    const original = originals.get(realPath);
-    const isNew = original === null || original === undefined;
+  // derive what changed from the CURRENT disk state vs the captured originals
+  const changedFiles = workOrder.targetFiles.filter((path) => {
+    const original = originals.get(path) ?? null;
+    const current = existsSync(path) ? readFileSync(path, 'utf-8') : null;
+    return original !== current;
+  });
+
+  console.log(`\n${BOLD}${changedFiles.length} file(s) changed:${RESET}\n`);
+
+  for (const realPath of changedFiles) {
+    const original = originals.get(realPath) ?? null;
+    const current = readFileSync(realPath, 'utf-8');
+    const isNew = original === null;
+
     if (isNew) {
       console.log(`${CYAN}${BOLD}NEW FILE:${RESET} ${realPath}`);
-      const lines = change.newContent.replace(/\n$/, '').split('\n');
+      const lines = current.replace(/\n$/, '').split('\n');
       for (const line of lines) {
         console.log(`${GREEN}+ ${line}${RESET}`);
       }
     } else {
       console.log(`${CYAN}${BOLD}MODIFIED:${RESET} ${realPath}`);
-      const parts = diffLines(normalize(original), normalize(change.newContent));
+      const parts = diffLines(normalize(original), normalize(current));
       const CONTEXT = 3;
 
       parts.forEach((part, i) => {
@@ -461,28 +510,85 @@ const showDiffs = (workOrder: WorkOrder, changes: Change[], dir: string, origina
   }
 };
 
-const applyChanges = async (dir: string, workOrder: WorkOrder, branch: string, writtenPaths: string[]) => {
-  const commitMessage = `${workOrder.type}: ${workOrder.description}`;
-  for (const p of writtenPaths) {
-    run(`git add ${JSON.stringify(p)}`, dir);
-  }
-  run(`git commit -m ${JSON.stringify(commitMessage)}`, dir);
+const finish = async (dir: string, branch: string) => {
+  console.log(`\n${GREEN}✓ Committed to branch ${branch}${RESET}`);
+  const where = await select({
+    message: 'Open the branch to inspect, or finish?',
+    choices: [
+      { name: 'Open in VS Code', value: 'vscode' },
+      { name: 'Open in Ghostty', value: 'ghostty' },
+      { name: 'Finish (back to main)', value: 'finish' },
+    ],
+  });
+  if (where === 'vscode') execSync(`code .`, { cwd: dir });
+  else if (where === 'ghostty') execSync(`open -a Ghostty ${JSON.stringify(dir)}`, { cwd: dir });
+  else run(`git checkout -`, dir);
+};
 
-  console.log(`\nCommitted "${workOrder.description}" to branch ${branch}`);
+const executeAndRefine = async (workOrder: WorkOrder, client: Anthropic, dir: string) => {
+  const safeSlug = workOrder.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const branch = `${workOrder.type}/${safeSlug}`;
+  run(`git checkout -b ${branch}`, dir);
 
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const open = await rl.question('Open the branch? (vscode / ghostty / no) ');
-  rl.close();
+  let feedback: string[] = [];
+  let { originals } = await runVerifiedExecution(workOrder, client, dir, branch, feedback);
+  showDiffs(workOrder, originals);
 
-  if (open.trim().toLowerCase() === 'vscode') {
-    execSync(`code .`, { cwd: dir });
-    console.log(`Opened VS Code on ${branch}. You're on the branch.`);
-  } else if (open.trim().toLowerCase() === 'ghostty') {
-    execSync(`open -a Ghostty ${JSON.stringify(dir)}`);
-    console.log(`Opened Ghostty on ${branch}.`);
-  } else {
-    run(`git checkout -`, dir);
-    console.log(`Committed to branch ${branch}. Back on main.`);
+  while (true) {
+    const answer = await select({
+      message: 'What do you want to do now?',
+      choices: [
+        {
+          name: 'Inspect',
+          value: 'inspect',
+          description: 'Open the branch and inspect the code',
+        },
+        {
+          name: 'Refine',
+          value: 'refine',
+          description: 'Provide feedback to modify and rewrite the code',
+        },
+        {
+          name: 'Approve',
+          value: 'approve',
+          description: 'Keep these changes and finish (already committed to the branch)',
+        },
+        {
+          name: 'Discard',
+          value: 'discard',
+          description: 'Discard everything and delete the branch',
+        },
+      ],
+    });
+
+    switch (answer) {
+      case 'inspect':
+        const where = await select({
+          message: 'Open where?',
+          choices: [
+            { name: 'VS Code', value: 'vscode' },
+            { name: 'Ghostty', value: 'ghostty' },
+          ],
+        });
+        if (where === 'vscode') execSync(`code .`, { cwd: dir });
+        else execSync(`open -a Ghostty ${JSON.stringify(dir)}`, { cwd: dir });
+        console.log(`Opened ${where}. Inspect, then come back here to decide.`);
+        break;
+
+      case 'refine':
+        feedback.push(await input({ message: 'Enter your feedback' }));
+        await runVerifiedExecution(workOrder, client, dir, branch, feedback);
+        showDiffs(workOrder, originals);
+        break;
+
+      case 'approve':
+        await finish(dir, branch);
+        return;
+
+      case 'discard':
+        cleanup(dir, branch);
+        return;
+    }
   }
 };
 
@@ -501,9 +607,7 @@ const main = async () => {
   console.log(intent.isThereIntent ? 'Using magent.md as intent.' : 'No magent.md found — proposing without intent.');
 
   const workOrder = await runPlanner(files, intent.text, client);
-  const { changes, branch, writtenPaths, originals } = await runVerifiedExecution(workOrder, client, target);
-  showDiffs(workOrder, changes, target, originals);
-  await applyChanges(target, workOrder, branch, writtenPaths);
+  await executeAndRefine(workOrder, client, target);
 };
 
 main();
