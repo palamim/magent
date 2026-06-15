@@ -3,7 +3,7 @@ import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { extname, join, dirname } from 'node:path';
+import { extname, join, dirname, resolve } from 'node:path';
 import { diffLines } from 'diff';
 import { input, select } from '@inquirer/prompts';
 
@@ -666,6 +666,13 @@ const main = async () => {
   const target = process.argv[2] ?? process.env['MAGENT_PROJECT_PATH'];
   if (!target) {
     console.error('Usage: node propose.ts <path-to-project>  (or set MAGENT_PROJECT_PATH in .env)');
+    process.exit(1);
+  }
+  const runnerDir = process.cwd();
+  if (resolve(target) === resolve(runnerDir)) {
+    console.error(
+      "Refusing to target the running Magent directory itself — point at a separate clone or worktree to avoid switching the running tool's branch mid-run.",
+    );
     process.exit(1);
   }
 
