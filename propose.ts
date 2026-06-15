@@ -69,6 +69,37 @@ const readFileTool: Anthropic.Tool = {
   },
 };
 
+const submitChangesTool: Anthropic.Tool = {
+  name: 'submit_changes',
+  description:
+    'Submit the complete set of file changes that implement the work order. Call this exactly once, with every file you are creating or modifying. This is the ONLY way to deliver your work.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      changes: {
+        type: 'array',
+        description: 'Every file you are changing, each with its full new contents.',
+        items: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description:
+                'The absolute path of the file being changed, exactly as given in the work order targetFiles.',
+            },
+            newContent: {
+              type: 'string',
+              description: 'The complete new contents of the file.',
+            },
+          },
+          required: ['path', 'newContent'],
+        },
+      },
+    },
+    required: ['changes'],
+  },
+};
+
 // ---- helper functions (collectProjectFiles, runPlanner, runExecutor, showDiffs...) ----
 const phase = (label: string) => console.log(`\n${BOLD}${CYAN}▸ ${label}${RESET}`);
 
@@ -288,8 +319,7 @@ Implement the instructions faithfully. Change only what the instructions require
 existing formatting, imports, and code you aren't explicitly changing. Return each changed file as
 its complete new contents with minimal, surgical edits — do not reformat or restructure untouched code.
 
-ALWAYS return a JSON array, even for a single file: [{ "path": "...", "newContent": "..." }]
-Do NOT return raw code blocks or prose. The array is required.
+Deliver your changes by calling the submit_changes tool.
 
 --- DESCRIPTION ---
 ${workOrder.description}
@@ -328,8 +358,7 @@ Rules:
 - If the builder asks to revert or restore something, look at the BACKGROUND and CURRENT FILES to
   understand the prior state, and return it to what they describe.
 
-ALWAYS return a JSON array, even for a single file: [{ "path": "...", "newContent": "..." }]
-Do NOT return raw code blocks or prose. The array is required.
+Deliver your changes by calling the submit_changes tool.
 
 --- CURRENT FILES ---
 ${targetBlock}
@@ -366,38 +395,22 @@ const buildPrompt = (workOrder: WorkOrder, feedback: string[], attempts: Attempt
 };
 
 const runExecutor = async (client: Anthropic, prompt: string): Promise<Change[]> => {
-  const workMessage: Anthropic.MessageParam[] = [
-    {
-      role: 'user',
-      content: prompt,
-    },
-  ];
-
   console.log('\nExecuting the work order...');
   const execMessage = await client.messages.create({
     max_tokens: 16000,
     model: 'claude-sonnet-4-6',
-    messages: workMessage,
+    messages: [{ role: 'user', content: prompt }],
+    tools: [submitChangesTool],
+    tool_choice: { type: 'tool', name: 'submit_changes' },
   });
 
-  const execBlock = execMessage.content[0];
-  const execText = execBlock && execBlock.type === 'text' ? execBlock.text : '';
-
-  const jsonStr = extractLastJson(execText, '[', ']');
-  if (!jsonStr) {
-    console.error(`\n${RED}Executor did not return a JSON array.${RESET}`);
-    console.error(`${DIM}The model returned prose or malformed output instead. Re-run to try again.${RESET}`);
+  const toolUse = execMessage.content.find((b) => b.type === 'tool_use');
+  if (!toolUse || toolUse.type !== 'tool_use') {
+    console.error(`\n${RED}Executor did not call submit_changes.${RESET}`);
     process.exit(1);
   }
-  const changes: Change[] = JSON.parse(jsonStr);
-  const valid =
-    Array.isArray(changes) && changes.every((c) => c && typeof c.path === 'string' && typeof c.newContent === 'string');
 
-  if (!valid) {
-    console.error(`\n${RED}Executor returned malformed changes (missing path or newContent).${RESET}`);
-    console.error(`${DIM}This often happens when a large file response gets truncated. Re-run to try again.${RESET}`);
-    process.exit(1);
-  }
+  const { changes } = toolUse.input as { changes: Change[] };
   return changes;
 };
 
