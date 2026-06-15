@@ -390,6 +390,14 @@ const runExecutor = async (client: Anthropic, prompt: string): Promise<Change[]>
     process.exit(1);
   }
   const changes: Change[] = JSON.parse(jsonStr);
+  const valid =
+    Array.isArray(changes) && changes.every((c) => c && typeof c.path === 'string' && typeof c.newContent === 'string');
+
+  if (!valid) {
+    console.error(`\n${RED}Executor returned malformed changes (missing path or newContent).${RESET}`);
+    console.error(`${DIM}This often happens when a large file response gets truncated. Re-run to try again.${RESET}`);
+    process.exit(1);
+  }
   return changes;
 };
 
