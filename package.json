@@ -7,7 +7,8 @@
   "type": "module",
   "main": "propose.ts",
   "scripts": {
-    "magent": "tsx propose.ts"
+    "magent": "tsx propose.ts",
+    "magent:dev": "tsx propose.ts ../magent-dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.103.0",

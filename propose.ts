@@ -120,6 +120,32 @@ const readFiles = (paths: string[]) =>
 const formatFiles = (fileArr: { path: string; content: string }[]) =>
   fileArr.map((f) => `--- ${f.path} ---\n${f.content}`).join('\n\n');
 
+const extractLastJson = (text: string, open: '{' | '[', close: '}' | ']'): string | null => {
+  const starts: number[] = [];
+  for (let i = 0; i < text.length; i++) if (text[i] === open) starts.push(i);
+
+  for (let i = starts.length - 1; i >= 0; i--) {
+    const candidate = text.slice(starts[i]);
+    let depth = 0;
+    for (let j = 0; j < candidate.length; j++) {
+      if (candidate[j] === open) depth++;
+      else if (candidate[j] === close) {
+        depth--;
+        if (depth === 0) {
+          const slice = candidate.slice(0, j + 1);
+          try {
+            JSON.parse(slice);
+            return slice;
+          } catch {
+            break; // this start doesn't yield valid JSON; try an earlier one
+          }
+        }
+      }
+    }
+  }
+  return null;
+};
+
 const runPlanner = async (files: string[], intent: string, client: Anthropic, dir: string): Promise<WorkOrder> => {
   phase('Planning');
   const fileList = files.join('\n');
@@ -138,7 +164,11 @@ const runPlanner = async (files: string[], intent: string, client: Anthropic, di
                 need many files, pick the smallest valuable slice of it.
                 Read whatever files you need using the read_file tool to understand the project, then propose one next step.
                 Start by reading some files.
-                When you have explored enough, end your response with a JSON object in exactly this shape (you may include brief reasoning before it):
+                
+                When you have explored enough, end your response with EXACTLY ONE JSON object —
+                your final work order. Do not include multiple drafts, alternatives, or revised
+                versions. Think first if you must, but emit only the single final JSON object at
+                the very end of your response in exactly this shape:
                 {
                   "description": "<one sentence: what the next step is and why>",
                   "type": "<one of: feat, fix, chore, refactor, style, docs>",
@@ -194,23 +224,13 @@ const runPlanner = async (files: string[], intent: string, client: Anthropic, di
       const lastBlock = message.content.filter((b) => b.type === 'text').pop();
       const text = lastBlock && lastBlock.type === 'text' ? lastBlock.text : '';
 
-      const match = text.match(/\{[\s\S]*\}/);
-      if (!match) {
-        console.error('No JSON work order found:\n', text);
+      const jsonStr = extractLastJson(text, '{', '}');
+      if (!jsonStr) {
+        console.error('No valid JSON work order found in planner output:\n', text);
         process.exit(1);
       }
-      try {
-        workOrder = JSON.parse(match[0]);
-      } catch {
-        console.error('Could not parse work order JSON:\n', match[0]);
-        process.exit(1);
-      }
+      workOrder = JSON.parse(jsonStr);
       break;
-    }
-
-    if (message.content[0] && message.content[0].type === 'text') {
-      console.log('');
-      console.log(message.content[0].text);
     }
 
     const toolContent: Anthropic.ContentBlockParam[] = message.content
@@ -242,6 +262,10 @@ const runPlanner = async (files: string[], intent: string, client: Anthropic, di
     console.error('Planner ended loop without a work order (hit MAX_STEPS).');
     process.exit(1);
   }
+
+  console.log(`\n${BOLD}${CYAN}── PROPOSAL ──${RESET}`);
+  console.log(`${BOLD}${workOrder.type}:${RESET} ${workOrder.description}\n`);
+  console.log(`${DIM}${workOrder.instructions}${RESET}`);
 
   return workOrder;
 };
@@ -351,7 +375,7 @@ const runExecutor = async (client: Anthropic, prompt: string): Promise<Change[]>
 
   console.log('\nExecuting the work order...');
   const execMessage = await client.messages.create({
-    max_tokens: 8192,
+    max_tokens: 16000,
     model: 'claude-sonnet-4-6',
     messages: workMessage,
   });
@@ -359,22 +383,13 @@ const runExecutor = async (client: Anthropic, prompt: string): Promise<Change[]>
   const execBlock = execMessage.content[0];
   const execText = execBlock && execBlock.type === 'text' ? execBlock.text : '';
 
-  const execMatch = execText.match(/\[[\s\S]*\]/);
-  if (!execMatch) {
-    console.error('\n\x1b[31mExecutor did not return a JSON array.\x1b[0m');
-    console.error(
-      '\x1b[2mThis usually happens on single-file changes — the model returned raw code instead. Re-run to try again.\x1b[0m',
-    );
+  const jsonStr = extractLastJson(execText, '[', ']');
+  if (!jsonStr) {
+    console.error(`\n${RED}Executor did not return a JSON array.${RESET}`);
+    console.error(`${DIM}The model returned prose or malformed output instead. Re-run to try again.${RESET}`);
     process.exit(1);
   }
-
-  let changes: Change[];
-  try {
-    changes = JSON.parse(execMatch[0]);
-  } catch {
-    console.error('Could not parse executor array:\n', execMatch[0]);
-    process.exit(1);
-  }
+  const changes: Change[] = JSON.parse(jsonStr);
   return changes;
 };
 
@@ -443,6 +458,7 @@ const runVerifiedExecution = async (
     }
     if (!ok) {
       console.log(`\n${YELLOW}✗ Typecheck failed — feeding ${errors.split('\\n').length} errors back ${RESET}`);
+      console.log(`${DIM}${errors}${RESET}`);
       attempts.push({
         changes,
         errors,
@@ -458,10 +474,6 @@ const runVerifiedExecution = async (
 
 const showDiffs = (workOrder: WorkOrder, originals: Map<string, string | null>) => {
   const normalize = (s: string) => s.replace(/\n+$/, '') + '\n';
-
-  console.log(`\n${BOLD}${CYAN}── PROPOSAL ──${RESET}`);
-  console.log(`${BOLD}${workOrder.type}:${RESET} ${workOrder.description}\n`);
-  console.log(`${DIM}${workOrder.instructions}${RESET}`);
 
   // derive what changed from the CURRENT disk state vs the captured originals
   const changedFiles = workOrder.targetFiles.filter((path) => {
