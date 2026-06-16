@@ -774,6 +774,35 @@ const loadHistory = (dir: string): string => {
     .join('\n');
 };
 
+const checkGitPreconditions = (dir: string): void => {
+  try {
+    run('git rev-parse --git-dir', dir);
+  } catch {
+    throw new Error('Target directory is not a git repo');
+  }
+
+  let commitCount: number;
+  try {
+    const result = run('git rev-list --all --count', dir).trim();
+    commitCount = parseInt(result, 10);
+  } catch {
+    throw new Error('No commits found — make an initial commit first');
+  }
+  if (commitCount === 0) {
+    throw new Error('No commits found — make an initial commit first');
+  }
+
+  let status: string;
+  try {
+    status = run('git status --porcelain', dir).trim();
+  } catch {
+    throw new Error('Working tree is dirty — stash or commit changes before running Magent');
+  }
+  if (status !== '') {
+    throw new Error('Working tree is dirty — stash or commit changes before running Magent');
+  }
+};
+
 // ---- main ----
 const main = async () => {
   const client = new Anthropic();
@@ -791,12 +820,31 @@ const main = async () => {
     process.exit(1);
   }
 
+  try {
+    checkGitPreconditions(target);
+  } catch (err: any) {
+    console.error(`${RED}✗ ${err.message}${RESET}`);
+    process.exit(1);
+  }
+
   const files = collectProjectFiles(target);
   const intent = loadIntent(target);
   console.log(intent.isThereIntent ? 'Using magent.md as intent.' : 'No magent.md found — proposing without intent.');
 
   const workOrder = await runPlanner(files, intent.text, client, target);
-  await executeAndRefine(workOrder, client, target);
+  let crashed = true;
+  try {
+    await executeAndRefine(workOrder, client, target);
+    crashed = false;
+  } finally {
+    if (crashed) {
+      const safeSlug = workOrder.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+      const branch = `${workOrder.type}/${safeSlug}`;
+      run('git checkout -', target);
+      try { run(`git branch -D ${branch}`, target); } catch {}
+      console.log(`${DIM}↩ Crash cleanup: returned to previous branch and deleted ${branch}.${RESET}`);
+    }
+  }
 };
 
 main();
