@@ -549,12 +549,13 @@ const runVerifiedExecution = async (
     const { ok, errors } = typecheck(dir);
     if (ok) {
       console.log(`\n${GREEN}✓ Typecheck passed ${RESET}`);
-      const commitMessage = `${workOrder.type}: ${workOrder.description}\n\nCo-Authored-By: Magent <magent@noreply.local>`;
+      const subject = `${workOrder.type}: ${workOrder.description}`;
+      const trailer = `Co-Authored-By: Magent <magent@noreply.local>`;
       run(`git add -A`, dir);
       if (feedback.length === 0) {
-        run(`git commit -m ${JSON.stringify(commitMessage)}`, dir);
+        run(`git commit -m ${JSON.stringify(subject)} -m ${JSON.stringify(trailer)}`, dir);
       } else {
-        run(`git commit --amend -m ${JSON.stringify(commitMessage)}`, dir);
+        run(`git commit --amend -m ${JSON.stringify(subject)} -m ${JSON.stringify(trailer)}`, dir);
       }
 
       return { originals };
@@ -841,7 +842,9 @@ const main = async () => {
       const safeSlug = workOrder.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
       const branch = `${workOrder.type}/${safeSlug}`;
       run('git checkout -', target);
-      try { run(`git branch -D ${branch}`, target); } catch {}
+      try {
+        run(`git branch -D ${branch}`, target);
+      } catch {}
       console.log(`${DIM}↩ Crash cleanup: returned to previous branch and deleted ${branch}.${RESET}`);
     }
   }
