@@ -34,13 +34,24 @@ interface WorkOrder {
   instructions: string;
 }
 
-interface Change {
+interface Edit {
   path: string;
-  newContent: string;
+  oldText: string;
+  newText: string;
+}
+
+interface Create {
+  path: string;
+  content: string;
+}
+
+interface Changes {
+  edits: Edit[];
+  creates: Create[];
 }
 
 interface Attempt {
-  changes: Change[];
+  changes: Changes;
   errors: string;
 }
 
@@ -72,31 +83,56 @@ const readFileTool: Anthropic.Tool = {
 const submitChangesTool: Anthropic.Tool = {
   name: 'submit_changes',
   description:
-    'Submit the complete set of file changes that implement the work order. Call this exactly once, with every file you are creating or modifying. This is the ONLY way to deliver your work.',
+    'Submit the changes that implement the work order. Use `edits` to modify existing files (find-and-replace on exact text) and `creates` to make new files. Call this exactly once with all your changes.',
   input_schema: {
     type: 'object',
     properties: {
-      changes: {
+      edits: {
         type: 'array',
-        description: 'Every file you are changing, each with its full new contents.',
+        description:
+          'Modifications to existing files. Each edit finds an exact snippet (oldText) in a file and replaces it with newText. A single file may have multiple edits.',
         items: {
           type: 'object',
           properties: {
             path: {
               type: 'string',
-              description:
-                'The absolute path of the file being changed, exactly as given in the work order targetFiles.',
+              description: 'Absolute path of the file to edit, exactly as given in the work order targetFiles.',
             },
-            newContent: {
+            oldText: {
               type: 'string',
-              description: 'The complete new contents of the file.',
+              description:
+                'The EXACT text to find in the current file, copied verbatim including indentation and whitespace. It MUST appear EXACTLY ONCE in the file. Include enough surrounding lines (a few above and below the change) so the snippet is unique — if the line you are changing also appears elsewhere, widen the snippet until it matches only one place.',
+            },
+            newText: {
+              type: 'string',
+              description:
+                'The text to replace oldText with. This replaces the entire oldText snippet, so include any surrounding context lines from oldText that should be preserved.',
             },
           },
-          required: ['path', 'newContent'],
+          required: ['path', 'oldText', 'newText'],
+        },
+      },
+      creates: {
+        type: 'array',
+        description:
+          'New files to create. Only for files that do not yet exist. Each has the file path and its full content.',
+        items: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Absolute path of the new file, exactly as given in the work order targetFiles.',
+            },
+            content: {
+              type: 'string',
+              description: 'The complete contents of the new file.',
+            },
+          },
+          required: ['path', 'content'],
         },
       },
     },
-    required: ['changes'],
+    required: ['edits', 'creates'],
   },
 };
 
@@ -381,8 +417,12 @@ const buildPrompt = (workOrder: WorkOrder, feedback: string[], attempts: Attempt
   const attemptsBlock = attempts.length
     ? attempts
         .map((a, i) => {
-          const code = a.changes.map((c) => `--- ${c.path} ---\n${c.newContent}`).join('\n\n');
-          return `### Attempt ${i + 1}\nYou produced this code:\n${code}\n\nIt failed typecheck with these errors:\n${a.errors}`;
+          const editsStr = a.changes.edits
+            .map((e) => `  EDIT ${e.path}:\n  find:\n${e.oldText}\n  replace:\n${e.newText}`)
+            .join('\n\n');
+          const createsStr = a.changes.creates.map((c) => `  CREATE ${c.path}`).join('\n');
+          const what = [editsStr, createsStr].filter(Boolean).join('\n') || '(no changes)';
+          return `### Attempt ${i + 1}\nYou submitted:\n${what}\n\nIt failed with these errors:\n${a.errors}`;
         })
         .join('\n\n---\n\n')
     : '(none — this is your first attempt)';
@@ -394,7 +434,7 @@ const buildPrompt = (workOrder: WorkOrder, feedback: string[], attempts: Attempt
   return prompt;
 };
 
-const runExecutor = async (client: Anthropic, prompt: string): Promise<Change[]> => {
+const runExecutor = async (client: Anthropic, prompt: string): Promise<Changes> => {
   console.log('\nExecuting the work order...');
   const execMessage = await client.messages.create({
     max_tokens: 16000,
@@ -409,9 +449,7 @@ const runExecutor = async (client: Anthropic, prompt: string): Promise<Change[]>
     console.error(`\n${RED}Executor did not call submit_changes.${RESET}`);
     process.exit(1);
   }
-
-  const { changes } = toolUse.input as { changes: Change[] };
-  return changes;
+  return toolUse.input as Changes;
 };
 
 const run = (cmd: string, dir: string) => execSync(cmd, { cwd: dir, stdio: 'pipe' }).toString();
@@ -452,18 +490,57 @@ const runVerifiedExecution = async (
     phase(`Executing (attempt ${steps}/${MAX_STEPS})`);
     const prompt = buildPrompt(workOrder, feedback, attempts);
     const changes = await runExecutor(client, prompt);
-    const resolved = changes.map((c) => ({ change: c, realPath: resolvePath(c.path, workOrder, dir) }));
-    const unresolved = resolved.filter((r) => r.realPath === null);
+
+    const allPaths = [...changes.edits.map((e) => e.path), ...changes.creates.map((c) => c.path)];
+    const unresolved = allPaths.filter((p) => resolvePath(p, workOrder, dir) === null);
     if (unresolved.length) {
       console.error(`\nAborting — these paths could not be resolved:`);
-      for (const u of unresolved) console.error(`  ${u.change.path}`);
+      for (const p of unresolved) console.error(`  ${p}`);
       cleanup(dir, branch);
       process.exit(1);
     }
-    for (const { change, realPath } of resolved) {
-      mkdirSync(dirname(realPath!), { recursive: true });
-      writeFileSync(realPath!, change.newContent, 'utf8');
+
+    // apply the changes; collect any that don't apply cleanly
+    const applyErrors: string[] = [];
+
+    // creates: write full content
+    for (const c of changes.creates) {
+      const realPath = resolvePath(c.path, workOrder, dir)!;
+      mkdirSync(dirname(realPath), { recursive: true });
+      writeFileSync(realPath, c.content, 'utf8');
     }
+
+    // edits: find oldText (must appear exactly once) and replace
+    for (const e of changes.edits) {
+      const realPath = resolvePath(e.path, workOrder, dir)!;
+      const current = existsSync(realPath) ? readFileSync(realPath, 'utf8') : '';
+      const occurrences = current.split(e.oldText).length - 1;
+
+      if (occurrences === 0) {
+        applyErrors.push(
+          `In ${e.path}: could not find the oldText to replace. The snippet was not present in the file (check exact whitespace/indentation).\noldText was:\n${e.oldText}`,
+        );
+        continue;
+      }
+      if (occurrences > 1) {
+        applyErrors.push(
+          `In ${e.path}: the oldText matched ${occurrences} places, so it is ambiguous. Include more surrounding lines to make it unique.\noldText was:\n${e.oldText}`,
+        );
+        continue;
+      }
+      writeFileSync(realPath, current.replace(e.oldText, e.newText), 'utf8');
+    }
+
+    // if any edit failed to apply, feed back and retry BEFORE typechecking
+    if (applyErrors.length) {
+      run(`git checkout .`, dir); //apply edits in-memory, write only if all match, to avoid half-applied disk state on retry.
+      const errors = applyErrors.join('\n\n');
+      console.log(`\n${YELLOW}✗ ${applyErrors.length} edit(s) could not be applied — feeding back${RESET}`);
+      console.log(`${DIM}${errors}${RESET}`);
+      attempts.push({ changes, errors });
+      continue; // retry the loop; do not typecheck a half-applied state
+    }
+
     const { ok, errors } = typecheck(dir);
     if (ok) {
       console.log(`\n${GREEN}✓ Typecheck passed ${RESET}`);
