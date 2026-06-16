@@ -449,7 +449,12 @@ const runExecutor = async (client: Anthropic, prompt: string): Promise<Changes> 
     console.error(`\n${RED}Executor did not call submit_changes.${RESET}`);
     process.exit(1);
   }
-  return toolUse.input as Changes;
+  const raw = toolUse.input as Partial<Changes>;
+  const changes: Changes = {
+    edits: Array.isArray(raw.edits) ? raw.edits : [],
+    creates: Array.isArray(raw.creates) ? raw.creates : [],
+  };
+  return changes;
 };
 
 const run = (cmd: string, dir: string) => execSync(cmd, { cwd: dir, stdio: 'pipe' }).toString();
