@@ -342,6 +342,7 @@ const buildImplementPrompt = (
   targetBlock: string,
   contextBlock: string,
   attemptsBlock: string,
+  conventions: string,
 ): string => `You are a senior software engineer for a builder, implementing the next step for their project.
 
 Your job: implement the work order below by editing the TARGET FILES. Below you'll find:
@@ -370,13 +371,17 @@ ${targetBlock}
 ${contextBlock}
 
 --- ATTEMPTS (typecheck failures to fix) ---
-${attemptsBlock}`;
+${attemptsBlock}
+
+--- CONVENTIONS (project-specific conventions) ---
+${conventions}`;
 
 const buildRefinePrompt = (
   workOrder: WorkOrder,
   targetBlock: string,
   attemptsBlock: string,
   feedbackBlock: string,
+  conventions: string,
 ): string => `You are a senior software engineer for a builder, refining code you previously wrote for them.
 
 The builder reviewed the current code and asked for specific changes. Your job is NOT to re-implement
@@ -406,9 +411,12 @@ ${feedbackBlock}
 ${workOrder.instructions}
 
 --- ATTEMPTS (typecheck failures to fix) ---
-${attemptsBlock}`;
+${attemptsBlock}
 
-const buildPrompt = (workOrder: WorkOrder, feedback: string[], attempts: Attempt[]): string => {
+--- CONVENTIONS (project-specific conventions) ---
+${conventions}`;
+
+const buildPrompt = (workOrder: WorkOrder, feedback: string[], attempts: Attempt[], dir: string): string => {
   const contextFiles = readFiles(workOrder.contextFiles);
   const targetFiles = readFiles(workOrder.targetFiles);
   const contextBlock = workOrder.contextFiles.length ? formatFiles(contextFiles) : '(none)';
@@ -426,10 +434,11 @@ const buildPrompt = (workOrder: WorkOrder, feedback: string[], attempts: Attempt
         })
         .join('\n\n---\n\n')
     : '(none — this is your first attempt)';
+  const conventions = loadConventions(dir);
 
   const prompt = feedback.length
-    ? buildRefinePrompt(workOrder, targetBlock, attemptsBlock, feedbackBlock)
-    : buildImplementPrompt(workOrder, targetBlock, contextBlock, attemptsBlock);
+    ? buildRefinePrompt(workOrder, targetBlock, attemptsBlock, feedbackBlock, conventions)
+    : buildImplementPrompt(workOrder, targetBlock, contextBlock, attemptsBlock, conventions);
 
   return prompt;
 };
@@ -493,7 +502,7 @@ const runVerifiedExecution = async (
   while (steps < MAX_STEPS) {
     steps++;
     phase(`Executing (attempt ${steps}/${MAX_STEPS})`);
-    const prompt = buildPrompt(workOrder, feedback, attempts);
+    const prompt = buildPrompt(workOrder, feedback, attempts, dir);
     const changes = await runExecutor(client, prompt);
 
     const allPaths = [...changes.edits.map((e) => e.path), ...changes.creates.map((c) => c.path)];
@@ -773,6 +782,13 @@ const loadHistory = (dir: string): string => {
       return `- Discarded "${o.proposal}" (no reason given).${refined}`;
     })
     .join('\n');
+};
+
+const loadConventions = (dir: string): string => {
+  const conventionsPath = join(dir, '.magent', 'conventions.md');
+  if (!existsSync(conventionsPath)) return '(none)';
+  const conventions = readFileSync(conventionsPath, 'utf-8');
+  return conventions;
 };
 
 const checkGitPreconditions = (dir: string): void => {
