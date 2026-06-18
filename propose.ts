@@ -162,15 +162,14 @@ const loadIntent = (dir: string): Intent => {
   };
 };
 
-const resolvePath = (returnedPath: string, workOrder: WorkOrder, dir: string): string | null => {
-  if (workOrder.targetFiles.includes(returnedPath)) return returnedPath;
-  // relative path → resolve against project dir
-  const asAbsolute = returnedPath.startsWith('/') ? returnedPath : join(dir, returnedPath);
-  if (workOrder.targetFiles.includes(asAbsolute)) return asAbsolute;
-  const match = workOrder.targetFiles.find(
-    (t) => t.endsWith(returnedPath) || t.endsWith('/' + returnedPath.replace(/^\/+/, '')),
-  );
-  return match ?? null;
+const resolveProjectPath = (returnedPath: string, dir: string): string | null => {
+  const abs = returnedPath.startsWith('/') ? returnedPath : join(dir, returnedPath);
+  const resolvedAbs = resolve(abs);
+  const resolvedDir = resolve(dir);
+  // must be inside the project dir (or the dir itself) — separator guard prevents
+  // sibling-dir leakage like /proj-secrets matching /proj
+  if (resolvedAbs !== resolvedDir && !resolvedAbs.startsWith(resolvedDir + '/')) return null;
+  return resolvedAbs;
 };
 
 const readFiles = (paths: string[]) =>
@@ -213,9 +212,8 @@ const extractLastJson = (text: string, open: '{' | '[', close: '}' | ']'): strin
   return null;
 };
 
-const runPlanner = async (files: string[], intent: string, client: Anthropic, dir: string): Promise<WorkOrder> => {
+const runPlanner = async (fileList: string, intent: string, client: Anthropic, dir: string): Promise<WorkOrder> => {
   phase('Planning');
-  const fileList = files.join('\n');
   const history = loadHistory(dir);
   const messages: Anthropic.MessageParam[] = [
     {
@@ -343,20 +341,29 @@ const buildImplementPrompt = (
   contextBlock: string,
   attemptsBlock: string,
   conventions: string,
+  fileList: string,
 ): string => `You are a senior software engineer for a builder, implementing the next step for their project.
 
 Your job: implement the work order below by editing the TARGET FILES. Below you'll find:
 - DESCRIPTION: a one-line summary of what you're implementing
 - INSTRUCTIONS: the specific, step-by-step description of what to do, file by file
-- TARGET FILES: the files you may change, with their current content
-- CONTEXT FILES: files for reference only — read them to understand the project, but do NOT change them
-- ATTEMPTS: previous tries of this same task that failed typecheck, if any
+- TARGET FILES: the files the planner expects you to change, with their current content already included
+- CONTEXT FILES: files included for reference — read them to understand the project, but do NOT change them unless the instructions require it
+- PROJECT FILE LIST: every file in the project. You may read ANY of these with the read_file tool.
+- ATTEMPTS: previous tries of this same task that failed, if any
+- CONVENTIONS: project-specific conventions you must follow
 
-Implement the instructions faithfully. Change only what the instructions require; preserve all
-existing formatting, imports, and code you aren't explicitly changing. Return each changed file as
-its complete new contents with minimal, surgical edits — do not reformat or restructure untouched code.
+You can read any project file with the read_file tool before submitting. Use it whenever you need to see
+a file that is NOT already included above — for example, to match an existing component's style, or to edit
+a file the instructions reference but whose content you haven't been shown. Do not guess at a file's
+contents: if you need to see it, read it.
 
-Deliver your changes by calling the submit_changes tool.
+When you are ready, deliver your changes by calling the submit_changes tool. You may edit or create any
+file inside the project, not only the target files — if implementing the instructions correctly requires
+changing a file not listed in TARGET FILES, read it first, then include it in your edits.
+
+Change only what the instructions require; preserve all existing formatting, imports, and code you aren't
+explicitly changing.
 
 --- DESCRIPTION ---
 ${workOrder.description}
@@ -364,13 +371,16 @@ ${workOrder.description}
 --- INSTRUCTIONS ---
 ${workOrder.instructions}
 
---- TARGET FILES ---
+--- TARGET FILES (content included) ---
 ${targetBlock}
 
---- CONTEXT FILES ---
+--- CONTEXT FILES (content included, reference only) ---
 ${contextBlock}
 
---- ATTEMPTS (typecheck failures to fix) ---
+--- PROJECT FILE LIST (read any with read_file) ---
+${fileList}
+
+--- ATTEMPTS (previous failures to fix) ---
 ${attemptsBlock}
 
 --- CONVENTIONS (project-specific conventions) ---
@@ -382,41 +392,66 @@ const buildRefinePrompt = (
   attemptsBlock: string,
   feedbackBlock: string,
   conventions: string,
+  fileList: string,
 ): string => `You are a senior software engineer for a builder, refining code you previously wrote for them.
 
 The builder reviewed the current code and asked for specific changes. Your job is NOT to re-implement
 the original task — it is already done. Your only job is to make the changes the builder requested,
 and nothing else. Below you'll find:
-- CURRENT FILES: the exact current state of every file in play — this is what you are editing
+- CURRENT FILES: the exact current state of the files in play — this is what you are editing
 - REQUESTED CHANGES: what the builder wants changed, in order (later items win on conflict)
+- PROJECT FILE LIST: every file in the project. You may read ANY of these with the read_file tool.
 - BACKGROUND: the original work order, for context only — do NOT re-execute it
-- ATTEMPTS: previous tries of this refinement that failed typecheck, if any
+- ATTEMPTS: previous tries of this refinement that failed, if any
+- CONVENTIONS: project-specific conventions you must follow
+
+You can read any project file with the read_file tool before submitting. Use it whenever the requested
+change refers to a file you cannot see in CURRENT FILES — for example, if the builder asks you to make
+this component match another existing component, read that other component first so you copy it
+faithfully. Do NOT guess at a file's contents or invent what you think it contains: if you need to see
+it, read it.
+
+The builder's feedback may ask you to change files beyond the original work order — including files not
+shown in CURRENT FILES. Treat the feedback as the source of truth for what to do now. If it asks you to
+modify a file you can't see, read it and edit it. Do not refuse to act just because the change is outside
+the original task's scope — the builder's latest request is what matters.
 
 Rules:
-- Make ONLY the changes the builder requested. Locate the relevant code in CURRENT FILES and change it.
-- Leave everything else in the files exactly as it is — same formatting, imports, structure, spacing.
+- Make ONLY the changes the builder requested. Locate the relevant code (read it if it isn't shown), and change it.
+- Leave everything else exactly as it is — same formatting, imports, structure, spacing.
 - Return ONLY the files you actually change. If a requested change is already satisfied, do nothing for it.
-- If the builder asks to revert or restore something, look at the BACKGROUND and CURRENT FILES to
+- If the builder asks to revert or restore something, use BACKGROUND and the current files to
   understand the prior state, and return it to what they describe.
+- You may edit or create any file inside the project, not only the ones shown — if a requested change
+  requires touching a file not included above, read it first, then include it in your edits.
 
-Deliver your changes by calling the submit_changes tool.
+When you are done, deliver your changes by calling the submit_changes tool.
 
---- CURRENT FILES ---
+--- CURRENT FILES (content included) ---
 ${targetBlock}
 
 --- REQUESTED CHANGES (most recent last) ---
 ${feedbackBlock}
 
+--- PROJECT FILE LIST (read any with read_file) ---
+${fileList}
+
 --- BACKGROUND (original task — do NOT re-execute, context only) ---
 ${workOrder.instructions}
 
---- ATTEMPTS (typecheck failures to fix) ---
+--- ATTEMPTS (previous failures to fix) ---
 ${attemptsBlock}
 
 --- CONVENTIONS (project-specific conventions) ---
 ${conventions}`;
 
-const buildPrompt = (workOrder: WorkOrder, feedback: string[], attempts: Attempt[], dir: string): string => {
+const buildPrompt = (
+  workOrder: WorkOrder,
+  feedback: string[],
+  attempts: Attempt[],
+  dir: string,
+  fileList: string,
+): string => {
   const contextFiles = readFiles(workOrder.contextFiles);
   const targetFiles = readFiles(workOrder.targetFiles);
   const contextBlock = workOrder.contextFiles.length ? formatFiles(contextFiles) : '(none)';
@@ -437,33 +472,73 @@ const buildPrompt = (workOrder: WorkOrder, feedback: string[], attempts: Attempt
   const conventions = loadConventions(dir);
 
   const prompt = feedback.length
-    ? buildRefinePrompt(workOrder, targetBlock, attemptsBlock, feedbackBlock, conventions)
-    : buildImplementPrompt(workOrder, targetBlock, contextBlock, attemptsBlock, conventions);
+    ? buildRefinePrompt(workOrder, targetBlock, attemptsBlock, feedbackBlock, conventions, fileList)
+    : buildImplementPrompt(workOrder, targetBlock, contextBlock, attemptsBlock, conventions, fileList);
 
   return prompt;
 };
 
-const runExecutor = async (client: Anthropic, prompt: string): Promise<Changes> => {
+const runExecutor = async (client: Anthropic, prompt: string, dir: string): Promise<Changes> => {
   console.log('\nExecuting the work order...');
-  const execMessage = await client.messages.create({
-    max_tokens: 16000,
-    model: 'claude-sonnet-4-6',
-    messages: [{ role: 'user', content: prompt }],
-    tools: [submitChangesTool],
-    tool_choice: { type: 'tool', name: 'submit_changes' },
-  });
+  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
 
-  const toolUse = execMessage.content.find((b) => b.type === 'tool_use');
-  if (!toolUse || toolUse.type !== 'tool_use') {
-    console.error(`\n${RED}Executor did not call submit_changes.${RESET}`);
-    process.exit(1);
+  let steps = 0;
+  const MAX_STEPS = 5;
+
+  while (steps < MAX_STEPS) {
+    steps++;
+    const execMessage = await client.messages.create({
+      max_tokens: 16000,
+      model: 'claude-sonnet-4-6',
+      tools: [readFileTool, submitChangesTool],
+      messages,
+    });
+
+    messages.push({ role: 'assistant', content: execMessage.content });
+
+    // did it submit? then we're done
+    const submit = execMessage.content.find((b) => b.type === 'tool_use' && b.name === 'submit_changes');
+    if (submit && submit.type === 'tool_use') {
+      const raw = submit.input as Partial<Changes>;
+      return {
+        edits: Array.isArray(raw.edits) ? raw.edits : [],
+        creates: Array.isArray(raw.creates) ? raw.creates : [],
+      };
+    }
+
+    // otherwise handle any read_file calls and loop
+    const readCalls = execMessage.content.filter((b) => b.type === 'tool_use' && b.name === 'read_file');
+    if (readCalls.length === 0) {
+      // model produced text but neither read nor submitted — nudge it
+      messages.push({
+        role: 'user',
+        content: 'Please either read a file with read_file or finish with submit_changes.',
+      });
+      continue;
+    }
+
+    const toolResults: Anthropic.ContentBlockParam[] = readCalls.map((tool) => {
+      if (tool.type !== 'tool_use') return null as never;
+      const { path } = tool.input as { path: string };
+      const resolved = resolveProjectPath(path, dir);
+      const exists = resolved && existsSync(resolved);
+      return {
+        type: 'tool_result',
+        tool_use_id: tool.id,
+        content: exists ? readFileSync(resolved, 'utf-8') : 'PathError: file not found in project.',
+        ...(!exists && { is_error: true }),
+      };
+    });
+    messages.push({ role: 'user', content: toolResults });
+
+    const names = readCalls.map((t) =>
+      t.type === 'tool_use' ? (t.input as { path: string }).path.split('/').pop() : '',
+    );
+    console.log(`  ↳ executor reading: ${names.join(', ')}`);
   }
-  const raw = toolUse.input as Partial<Changes>;
-  const changes: Changes = {
-    edits: Array.isArray(raw.edits) ? raw.edits : [],
-    creates: Array.isArray(raw.creates) ? raw.creates : [],
-  };
-  return changes;
+
+  console.error(`\n${RED}Executor hit MAX_STEPS without submitting changes.${RESET}`);
+  process.exit(1);
 };
 
 const run = (cmd: string, dir: string) => execSync(cmd, { cwd: dir, stdio: 'pipe' }).toString();
@@ -490,23 +565,20 @@ const runVerifiedExecution = async (
   dir: string,
   branch: string,
   feedback: string[] = [],
+  fileList: string,
+  originals: Map<string, string | null>,
 ): Promise<{ originals: Map<string, string | null> }> => {
-  const originals = new Map<string, string | null>();
-  for (const t of workOrder.targetFiles) {
-    originals.set(t, existsSync(t) ? readFileSync(t, 'utf8') : null);
-  }
-
   let attempts: Attempt[] = [];
   let steps = 0;
   const MAX_STEPS = 3;
   while (steps < MAX_STEPS) {
     steps++;
     phase(`Executing (attempt ${steps}/${MAX_STEPS})`);
-    const prompt = buildPrompt(workOrder, feedback, attempts, dir);
-    const changes = await runExecutor(client, prompt);
+    const prompt = buildPrompt(workOrder, feedback, attempts, dir, fileList);
+    const changes = await runExecutor(client, prompt, dir);
 
     const allPaths = [...changes.edits.map((e) => e.path), ...changes.creates.map((c) => c.path)];
-    const unresolved = allPaths.filter((p) => resolvePath(p, workOrder, dir) === null);
+    const unresolved = allPaths.filter((p) => resolveProjectPath(p, dir) === null);
     if (unresolved.length) {
       console.error(`\nAborting — these paths could not be resolved:`);
       for (const p of unresolved) console.error(`  ${p}`);
@@ -517,17 +589,27 @@ const runVerifiedExecution = async (
     // apply the changes; collect any that don't apply cleanly
     const applyErrors: string[] = [];
 
-    // creates: write full content
+    // creates: write full content, but only for files that don't exist
     for (const c of changes.creates) {
-      const realPath = resolvePath(c.path, workOrder, dir)!;
+      const realPath = resolveProjectPath(c.path, dir)!;
+      if (existsSync(realPath)) {
+        applyErrors.push(
+          `In ${c.path}: you used "creates" for a file that already exists. Use "edits" to modify existing files; "creates" is only for new files.`,
+        );
+        continue;
+      }
+      if (!originals.has(realPath)) originals.set(realPath, null);
       mkdirSync(dirname(realPath), { recursive: true });
       writeFileSync(realPath, c.content, 'utf8');
     }
 
     // edits: find oldText (must appear exactly once) and replace
     for (const e of changes.edits) {
-      const realPath = resolvePath(e.path, workOrder, dir)!;
+      const realPath = resolveProjectPath(e.path, dir)!;
       const current = existsSync(realPath) ? readFileSync(realPath, 'utf8') : '';
+      if (!originals.has(realPath)) {
+        originals.set(realPath, existsSync(realPath) ? current : null);
+      }
       const occurrences = current.split(e.oldText).length - 1;
 
       if (occurrences === 0) {
@@ -558,15 +640,34 @@ const runVerifiedExecution = async (
     const { ok, errors } = typecheck(dir);
     if (ok) {
       console.log(`\n${GREEN}✓ Typecheck passed ${RESET}`);
+      run(`git add -A`, dir);
+
+      // is there anything to commit? (refine may have reverted to baseline → empty diff)
+      const staged = run(`git diff --cached --name-only`, dir).trim();
+      if (!staged) {
+        if (feedback.length === 0) {
+          // first implement produced nothing — that's a failure, feed back
+          console.log(`\n${YELLOW}✗ Executor produced no changes on first attempt — feeding back${RESET}`);
+          attempts.push({
+            changes,
+            errors:
+              'You submitted no edits or creates, but the work order requires changes. Make the change described in the instructions.',
+          });
+          continue;
+        } else {
+          // refine reverted to baseline — legitimately nothing to commit
+          console.log(`\n${YELLOW}No net changes — result matches previous state.${RESET}`);
+          return { originals };
+        }
+      }
+
       const subject = `${workOrder.type}: ${workOrder.description}`;
       const trailer = `Co-Authored-By: Magent <magent@noreply.local>`;
-      run(`git add -A`, dir);
       if (feedback.length === 0) {
         run(`git commit -m ${JSON.stringify(subject)} -m ${JSON.stringify(trailer)}`, dir);
       } else {
         run(`git commit --amend -m ${JSON.stringify(subject)} -m ${JSON.stringify(trailer)}`, dir);
       }
-
       return { originals };
     }
     if (!ok) {
@@ -585,11 +686,11 @@ const runVerifiedExecution = async (
   process.exit(1);
 };
 
-const showDiffs = (workOrder: WorkOrder, originals: Map<string, string | null>) => {
+const showDiffs = (originals: Map<string, string | null>) => {
   const normalize = (s: string) => s.replace(/\n+$/, '') + '\n';
 
   // derive what changed from the CURRENT disk state vs the captured originals
-  const changedFiles = workOrder.targetFiles.filter((path) => {
+  const changedFiles = [...originals.keys()].filter((path) => {
     const original = originals.get(path) ?? null;
     const current = existsSync(path) ? readFileSync(path, 'utf-8') : null;
     return original !== current;
@@ -666,14 +767,15 @@ const finish = async (dir: string, branch: string) => {
   else run(`git checkout -`, dir);
 };
 
-const executeAndRefine = async (workOrder: WorkOrder, client: Anthropic, dir: string) => {
+const executeAndRefine = async (workOrder: WorkOrder, client: Anthropic, dir: string, fileList: string) => {
   const safeSlug = workOrder.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const branch = `${workOrder.type}/${safeSlug}`;
   run(`git checkout -b ${branch}`, dir);
 
+  const originals = new Map<string, string | null>();
   let feedback: string[] = [];
-  let { originals } = await runVerifiedExecution(workOrder, client, dir, branch, feedback);
-  showDiffs(workOrder, originals);
+  await runVerifiedExecution(workOrder, client, dir, branch, feedback, fileList, originals);
+  showDiffs(originals);
 
   while (true) {
     const answer = await select({
@@ -718,8 +820,8 @@ const executeAndRefine = async (workOrder: WorkOrder, client: Anthropic, dir: st
 
       case 'refine':
         feedback.push(await input({ message: 'Enter your feedback' }));
-        await runVerifiedExecution(workOrder, client, dir, branch, feedback);
-        showDiffs(workOrder, originals);
+        await runVerifiedExecution(workOrder, client, dir, branch, feedback, fileList, originals);
+        showDiffs(originals);
         break;
 
       case 'approve':
@@ -845,13 +947,14 @@ const main = async () => {
   }
 
   const files = collectProjectFiles(target);
+  const fileList = files.join('\n');
   const intent = loadIntent(target);
   console.log(intent.isThereIntent ? 'Using magent.md as intent.' : 'No magent.md found — proposing without intent.');
 
-  const workOrder = await runPlanner(files, intent.text, client, target);
+  const workOrder = await runPlanner(fileList, intent.text, client, target);
   let crashed = true;
   try {
-    await executeAndRefine(workOrder, client, target);
+    await executeAndRefine(workOrder, client, target, fileList);
     crashed = false;
   } finally {
     if (crashed) {
