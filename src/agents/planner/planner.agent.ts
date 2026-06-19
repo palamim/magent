@@ -2,12 +2,11 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 import { ANTHROPIC_MODELS } from '@/agents/models';
 import { readFileTool } from '@/agents/tools/read-file.tool';
-
-import { loadHistory } from './utils/load-history';
-import { plannerPrompt } from './planner.prompt';
-import { type Plan } from './planner.types';
-import { createPlan } from './utils/create-plan';
-import { dispatchToolCalls } from '../tools/dispatch';
+import { dispatchToolCalls } from '@/agents/tools/dispatch';
+import { loadHistory } from '@/agents/planner/utils/load-history';
+import { plannerPrompt } from '@/agents/planner/planner.prompt';
+import { type Plan } from '@/agents/types/common.types';
+import { createPlan } from '@/agents/planner/utils/create-plan';
 
 const MAX_PLANNER_STEPS = 10;
 const MAX_PLANNER_TOKENS = 4096;

@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { Plan } from '@/agents/planner/planner.types';
+import { type Plan } from '@/agents/types/common.types';
 import { extractLastJson } from '@/agents/planner/utils/extract-json';
 
 export const createPlan = (message: Anthropic.Messages.Message): Plan => {

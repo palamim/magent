@@ -10,12 +10,3 @@ export interface Aftermath {
   feedback: string[];
   note: string;
 }
-
-export interface Plan {
-  description: string;
-  type: string;
-  slug: string;
-  targetFiles: string[];
-  contextFiles: string[];
-  instructions: string;
-}

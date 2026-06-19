@@ -4,8 +4,7 @@ import { ANTHROPIC_MODELS } from '@/agents/models';
 import { dispatchToolCalls } from '@/agents/tools/dispatch';
 import { executeSubmitExecution, submitExecutionTool } from '@/agents/tools/submit-execution.tool';
 import { readFileTool } from '@/agents/tools/read-file.tool';
-
-import type { Execution } from './executor.types';
+import type { Execution } from '@/agents/executor/executor.types';
 
 const MAX_EXECUTOR_STEPS = 3;
 const MAX_EXECUTOR_TOKENS = 16384;

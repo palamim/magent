@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { UserDecision, type Aftermath } from '../planner.types';
+
+import { UserDecision, type Aftermath } from '@/agents/planner/planner.types';
 
 export const loadHistory = (dir: string): string => {
   const historyPath = join(dir, '.magent', 'history.jsonl');
