@@ -3,7 +3,7 @@ import type { Plan } from '@/agents/types/common.types';
 
 import type { ExecAttempt } from '@/services/types/common.types';
 import { formatExecAttempts } from '@/services/run-verified-execution/format-attempts';
-import { loadConventions } from '@/services/run-verified-execution/load-conventions';
+import { loadConventions } from '@/project/conventions';
 import { readAndFormatFiles } from '@/services/run-verified-execution/read-format-files';
 
 export const buildPrompt = (

@@ -3,7 +3,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { ANTHROPIC_MODELS } from '@/agents/models';
 import { readFileTool } from '@/agents/tools/read-file.tool';
 import { dispatchToolCalls } from '@/agents/tools/dispatch';
-import { loadHistory } from '@/agents/planner/utils/load-history';
+import { loadHistory } from '@/project/history';
 import { plannerPrompt } from '@/agents/planner/planner.prompt';
 import { type Plan } from '@/agents/types/common.types';
 import { createPlan } from '@/agents/planner/utils/create-plan';
