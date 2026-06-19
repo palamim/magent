@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { executeReadFile } from './read-file.tool';
 
+// ── for feed-back tools ──
 export const dispatchToolCalls = (message: Anthropic.Messages.Message, dir: string): Anthropic.ContentBlockParam[] =>
   message.content
     .filter((block) => block.type === 'tool_use')
