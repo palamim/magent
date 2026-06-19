@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import type { Execution } from '../executor/executor.types';
+import type { Execution } from '@/agents/executor/executor.types';
 
 // ── declaration (faces the model) ──
 export const submitExecutionTool: Anthropic.Tool = {

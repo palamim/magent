@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { executeReadFile } from './read-file.tool';
+import { executeReadFile } from '@/agents/tools/read-file.tool';
 
 // ── for feed-back tools ──
 export const dispatchToolCalls = (message: Anthropic.Messages.Message, dir: string): Anthropic.ContentBlockParam[] =>

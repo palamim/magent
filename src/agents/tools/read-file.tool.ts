@@ -1,7 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { existsSync, readFileSync } from 'node:fs';
 
-import { resolveProjectPath } from '@/agents/utils/resolve-path';
+import { resolveProjectPath } from '@/lib/paths';
 
 // ── declaration (faces the model) ──
 export const readFileTool: Anthropic.Tool = {

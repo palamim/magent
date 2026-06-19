@@ -2,11 +2,11 @@ import { buildImplementPrompt, buildRefinePrompt } from '@/agents/executor';
 import type { Plan } from '@/agents/types/common.types';
 
 import type { ExecAttempt } from '@/services/types/common.types';
-import { formatExecAttempts } from '@/services/utils/format-executor-attempts';
-import { loadConventions } from '@/services/utils/load-conventions';
-import { readAndFormatFiles } from '@/services/utils/read-format-files';
+import { formatExecAttempts } from '@/services/run-verified-execution/format-attempts';
+import { loadConventions } from '@/services/run-verified-execution/load-conventions';
+import { readAndFormatFiles } from '@/services/run-verified-execution/read-format-files';
 
-export const buildExecutorPrompt = (
+export const buildPrompt = (
   plan: Plan,
   feedback: string[],
   execAttempts: ExecAttempt[],
