@@ -12,5 +12,13 @@ export const createPlan = (message: Anthropic.Messages.Message): Plan => {
     throw new Error(`No valid JSON plan found in planner output: ${text}`);
   }
 
-  return JSON.parse(jsonStr);
+  const parsed = JSON.parse(jsonStr);
+  return {
+    description: parsed.description ?? '',
+    type: parsed.type ?? 'chore',
+    slug: parsed.slug ?? 'untitled',
+    targetFiles: Array.isArray(parsed.targetFiles) ? parsed.targetFiles : [],
+    contextFiles: Array.isArray(parsed.contextFiles) ? parsed.contextFiles : [],
+    instructions: parsed.instructions ?? '',
+  };
 };

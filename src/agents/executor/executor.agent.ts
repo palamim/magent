@@ -31,7 +31,7 @@ export const runExecutor = async (client: Anthropic, prompt: string, dir: string
       (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use' && block.name === 'submit_changes',
     );
     if (submitBlock) {
-      execution = executeSubmitExecution(submitBlock.input);
+      return executeSubmitExecution(submitBlock.input);
     }
 
     const readCalls = message.content.filter((b) => b.type === 'tool_use' && b.name === 'read_file');

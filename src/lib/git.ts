@@ -9,6 +9,16 @@ export const cleanup = (dir: string, branch: string) => {
   run(`git branch -D ${branch}`, dir);
 };
 
+export const computeBranchDiff = (dir: string, branch: string): string => {
+  const base = run(`git merge-base main ${branch}`, dir).trim();
+  return run(`git diff ${base} ${branch}`, dir);
+};
+
+export const deriveBranchName = (type: string, slug: string): string => {
+  const safeSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  return `${type}/${safeSlug}`;
+};
+
 export const checkGitPreconditions = (dir: string): void => {
   try {
     run('git rev-parse --git-dir', dir);
