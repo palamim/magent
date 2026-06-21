@@ -6,7 +6,7 @@ import { loadIntent } from '@/project/intent';
 import { collectProjectFiles } from '@/lib/files';
 import { checkGitPreconditions } from '@/lib/git';
 
-export const getProposal = async (req: Request, res: Response) => {
+export const handlePropose = async (req: Request, res: Response) => {
   try {
     const { dir } = req.body as { dir?: string };
     if (!dir) {

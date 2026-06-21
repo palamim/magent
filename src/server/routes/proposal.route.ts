@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
-import { getProposal } from '@/server/controllers/proposal.controller';
+import { handlePropose } from '@/server/controllers/proposal.controller';
 
 export const proposalRouter = Router();
 
-proposalRouter.post('/proposal', getProposal);
+proposalRouter.post('/proposal', handlePropose);

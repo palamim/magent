@@ -5,7 +5,7 @@ import { collectProjectFiles } from '@/lib/files';
 import type { Plan } from '@/agents/types/common.types';
 import { executePlan } from '@/services/run-execution.service';
 
-export const postExecution = async (req: Request, res: Response) => {
+export const handleExecute = async (req: Request, res: Response) => {
   try {
     const {
       dir,
