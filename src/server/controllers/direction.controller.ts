@@ -13,7 +13,7 @@ export const handleDirection = async (req: Request, res: Response) => {
       dir?: string;
     };
     if (!dir) {
-      return res.status(400).json({ error: 'Missing dir or plan.' });
+      return res.status(400).json({ error: 'Missing dir.' });
     }
 
     const client = new Anthropic();
