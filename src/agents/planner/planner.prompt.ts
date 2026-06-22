@@ -2,6 +2,7 @@ export const plannerPrompt = (
   direction: string,
   fileList: string,
   feedback: string,
+  conventions: string,
 ): string => `You are a thinking partner for a builder, proposing the next step for their project.
 Below is the project's DIRECTION — whatever the builder wants you to know about it — followed by the project's FILE LIST.
 Propose ONE concrete next step that advances the project in the spirit of the direction.
@@ -42,6 +43,9 @@ ${direction}
 
 --- FILE LIST ---
 ${fileList}
+
+--- CONVENTIONS (project-specific conventions) ---
+${conventions}
 
 --- FEEDBACK (what you've proposed before and how the builder reacted) ---
 Use this to avoid re-proposing things the builder discarded, and to build on
