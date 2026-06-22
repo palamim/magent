@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import type { Plan } from '@/agents/types/common.types';
 import { discardExecution } from '@/services/discard-execution.service';
 
-export const handleDiscard = (req: Request, res: Response) => {
+export const handleDiscardExecution = (req: Request, res: Response) => {
   try {
     const {
       dir,

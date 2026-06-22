@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import type { Plan } from '@/agents/types/common.types';
 import { approveExecution } from '@/services/approve-execution.service';
 
-export const handleApprove = (req: Request, res: Response) => {
+export const handleApproveExecution = (req: Request, res: Response) => {
   try {
     const {
       dir,

@@ -1,11 +1,11 @@
 import { Router } from 'express';
 
-import { handleApprove } from '@/server/controllers/approve.controller';
-import { handleDiscard } from '@/server/controllers/discard.controller';
+import { handleApproveExecution } from '@/server/controllers/approve-execution.controller';
+import { handleDiscardExecution } from '@/server/controllers/discard-execution.controller';
 import { handleInspect } from '@/server/controllers/inspect.controller';
 
 export const actionsRouter = Router();
 
-actionsRouter.post('/approve', handleApprove);
-actionsRouter.post('/discard', handleDiscard);
+actionsRouter.post('/approve', handleApproveExecution);
+actionsRouter.post('/discard', handleDiscardExecution);
 actionsRouter.post('/inspect', handleInspect);
