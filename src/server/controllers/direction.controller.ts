@@ -40,8 +40,10 @@ export const handleDirection = async (req: Request, res: Response) => {
       rationale: proposal.rationale,
       direction: proposal.direction,
       conventions: proposal.conventions,
-      directionDiff,
-      conventionsDiff,
+      docs: [
+        { name: 'direction.md', diff: directionDiff },
+        { name: 'conventions.md', diff: conventionsDiff },
+      ],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
