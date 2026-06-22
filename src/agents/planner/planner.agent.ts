@@ -14,10 +14,11 @@ const MAX_PLANNER_STEPS = 10;
 const MAX_PLANNER_TOKENS = 4096;
 
 export const runPlanner = async (fileList: string, client: Anthropic, dir: string): Promise<Plan> => {
-  const direction: string = loadDirection(dir);
-  const feedback: string = loadFeedback(dir, Agent.PLANNER);
-  const conventions: string = loadConventions(dir);
-  const prompt: string = plannerPrompt(direction, fileList, feedback, conventions);
+  const direction = loadDirection(dir);
+  const conventions = loadConventions(dir);
+  const plannerFeedback = loadFeedback(dir, Agent.PLANNER);
+  const executorFeedback = loadFeedback(dir, Agent.EXECUTOR);
+  const prompt = plannerPrompt(direction, fileList, conventions, plannerFeedback, executorFeedback);
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
 
   let plan: Plan | null = null;
