@@ -1,9 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { Agent } from '@/agents/types/common.types';
+import { agentFilePath } from './agent-files';
+
+const CONVENTIONS_FILE = 'conventions.md';
 
 export const loadConventions = (dir: string): string => {
-  const conventionsPath = join(dir, '.magent', 'conventions.md');
-  if (!existsSync(conventionsPath)) return '(none)';
-  const conventions = readFileSync(conventionsPath, 'utf-8');
-  return conventions;
+  const path = agentFilePath(dir, Agent.EXECUTOR, CONVENTIONS_FILE);
+  if (!existsSync(path)) return '(none)';
+  return readFileSync(path, 'utf-8');
 };

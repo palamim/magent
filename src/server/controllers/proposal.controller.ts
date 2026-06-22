@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 
 import { runPlanner } from '@/agents/planner';
-import { loadIntent } from '@/project/intent';
 import { collectProjectFiles } from '@/lib/files';
 import { checkGitPreconditions } from '@/lib/git';
 
@@ -18,9 +17,8 @@ export const handlePropose = async (req: Request, res: Response) => {
     const client = new Anthropic();
     const files = collectProjectFiles(dir);
     const fileList = files.join('\n');
-    const intent = loadIntent(dir);
 
-    const plan = await runPlanner(fileList, intent.text, client, dir);
+    const plan = await runPlanner(fileList, client, dir);
 
     return res.json({ plan });
   } catch (error) {

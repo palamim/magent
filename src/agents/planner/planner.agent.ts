@@ -3,17 +3,19 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { ANTHROPIC_MODELS } from '@/agents/models';
 import { readFileTool } from '@/agents/tools/read-file.tool';
 import { dispatchToolCalls } from '@/agents/tools/dispatch';
-import { loadHistory } from '@/project/history';
 import { plannerPrompt } from '@/agents/planner/planner.prompt';
-import { type Plan } from '@/agents/types/common.types';
+import { Agent, type Plan } from '@/agents/types/common.types';
 import { createPlan } from '@/agents/planner/utils/create-plan';
+import { loadFeedback } from '@/project/feedback';
+import { loadDirection } from '@/project/direction';
 
 const MAX_PLANNER_STEPS = 10;
 const MAX_PLANNER_TOKENS = 4096;
 
-export const runPlanner = async (fileList: string, intent: string, client: Anthropic, dir: string): Promise<Plan> => {
-  const history: string = loadHistory(dir);
-  const prompt: string = plannerPrompt(intent, fileList, history);
+export const runPlanner = async (fileList: string, client: Anthropic, dir: string): Promise<Plan> => {
+  const direction: string = loadDirection(dir);
+  const feedback: string = loadFeedback(dir, Agent.PLANNER);
+  const prompt: string = plannerPrompt(direction, fileList, feedback);
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
 
   let plan: Plan | null = null;

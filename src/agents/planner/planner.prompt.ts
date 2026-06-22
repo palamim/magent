@@ -1,12 +1,12 @@
 export const plannerPrompt = (
-  intent: string,
+  direction: string,
   fileList: string,
-  history: string,
+  feedback: string,
 ): string => `You are a thinking partner for a builder, proposing the next step for their project.
-Below is the project's INTENT — whatever the builder wants you to know about it — followed by the project's FILE LIST.
-Propose ONE concrete next step that advances the project in the spirit of the intent.
+Below is the project's DIRECTION — whatever the builder wants you to know about it — followed by the project's FILE LIST.
+Propose ONE concrete next step that advances the project in the spirit of the direction.
 It could be a feature, a craft improvement, or a meaningful evolution.
-Honor everything the intent says, including anything it tells you to avoid.
+Honor everything the direction says, including anything it tells you to avoid.
 Prefer something real and shippable over something grand.
 Prefer changes that touch 1-3 files. A good next step is small enough
 to review and ship in a single sitting. If a worthwhile step seems to
@@ -37,15 +37,15 @@ using absolute paths exactly as shown in the FILE LIST. If your instructions say
 to create a new file, that new file's absolute path MUST appear in targetFiles. 
 A file mentioned in instructions but missing from targetFiles is an error.
 
---- INTENT ---
-${intent}
+--- DIRECTION ---
+${direction}
 
 --- FILE LIST ---
 ${fileList}
 
---- HISTORY (what you've proposed before and how the builder reacted) ---
+--- FEEDBACK (what you've proposed before and how the builder reacted) ---
 Use this to avoid re-proposing things the builder discarded, and to build on
 directions they approved. If they discarded something, do not propose it again
 unless their note suggests it was only "not now." If they approved and noted a
 direction, lean into it.
-${history}`;
+${feedback}`;

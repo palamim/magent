@@ -1,3 +1,9 @@
+export enum Agent {
+  DIRECTOR = 'director',
+  PLANNER = 'planner',
+  EXECUTOR = 'executor',
+}
+
 // --- Planner Agent returns — Executor Agent uses ---
 export interface Plan {
   description: string;
@@ -6,4 +12,17 @@ export interface Plan {
   targetFiles: string[];
   contextFiles: string[];
   instructions: string;
+}
+
+export enum Decision {
+  APPROVED = 'approved',
+  DISCARDED = 'discarded',
+}
+
+export interface FeedbackEntry {
+  timestamp: string;
+  proposal: string; // what the agent proposed
+  refinements: string[]; // refine messages given by the user during the loop
+  decision: Decision;
+  comment: string; // closing feedback/note
 }

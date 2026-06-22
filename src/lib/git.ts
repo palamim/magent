@@ -47,3 +47,22 @@ export const checkGitPreconditions = (dir: string): void => {
     throw new Error('Working tree is dirty — stash or commit changes before running Magent');
   }
 };
+
+export const discardBranch = (dir: string, branch: string): void => {
+  run(`git checkout main`, dir);
+  run(`git branch -D ${branch}`, dir);
+};
+
+export const mergeExecution = (dir: string, branch: string): { merged: boolean; pushed: boolean } => {
+  run(`git checkout main`, dir);
+  run(`git merge ${branch}`, dir);
+  run(`git branch -d ${branch}`, dir);
+  let pushed = false;
+  try {
+    run(`git push`, dir);
+    pushed = true;
+  } catch {
+    /* report, don't fail */
+  }
+  return { merged: true, pushed };
+};

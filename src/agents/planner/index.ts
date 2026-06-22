@@ -7,6 +7,3 @@
 
 // ── the agent: run the executor once, get an Execution back ──
 export { runPlanner } from './planner.agent';
-
-// ── the contract types the layer above needs ──
-export type { Aftermath } from './planner.types';
