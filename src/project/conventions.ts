@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { Agent } from '@/agents/types/common.types';
-import { agentFilePath } from './agent-files';
+import { agentFilePath } from '@/project/agent-files';
 
 const CONVENTIONS_FILE = 'conventions.md';
 
