@@ -1,34 +1,61 @@
-# Magent — point it at a codebase and it proposes a next step, builds it, and verifies it
+# Magent
 
-Give Magent a folder and it works like an engineer who already knows the project: it explores the codebase, decides what the most valuable next step is, implements it, checks its own work, and hands you a finished change on its own branch to review. It learns from what you approve and reject, so it gets better at proposing the longer you use it.
+**Set the direction. Magent plans and builds toward it.**
 
-## Intent: `magent.md`
+Magent is an agentic coding tool with a direction layer. You tell it where the project
+should go; a Director agent sets the frontier, a Planner turns it into concrete tasks, and
+an Executor implements them — each step reviewed and approved by you.
 
-Magent reads a `magent.md` file from the root of the target project — your description of what the project is and where it's headed. Every proposal is grounded in it: with it, Magent respects your taste and guardrails; without it, it infers direction from the code alone. No required format — write whatever steers it.
+This repo is the **brain** — it runs locally on your machine, reads and edits your project's
+files, and runs git. The interface is a hosted web app that talks to your local brain.
 
-Copy `magent.md.example` into your project root and edit it to get started.
-
-## Usage
+## Quickstart
 
 ```bash
-cp .env.example .env   # add your ANTHROPIC_API_KEY and a default MAGENT_PROJECT_PATH
+git clone https://github.com/palamim/magent
+cd magent
 npm install
-npm run magent                          # uses MAGENT_PROJECT_PATH from .env
-npm run magent -- /some/other/project   # or point it anywhere
+cp .env.example .env        # then add your Anthropic API key to .env as ANTHROPIC_API_KEY
+npm run server              # serves on http://localhost:7842
 ```
+
+Then open the UI at **[your hosted UI URL]**, and click **Retry connection**. Your browser
+will ask to allow access to your local network — click **Allow**. That's it.
+
+## What you need
+
+- Node.js
+- An [Anthropic API key](https://console.anthropic.com/) (Magent calls Claude from your
+  machine, using your key — your code and key never leave your computer)
 
 ## How it works
 
-Magent is a team of agents that propose, build, verify, and learn:
+Magent runs three agents, each above the last:
 
-1. **The planner** explores the codebase with the `read_file` tool — reading whatever it needs, across as many rounds as it takes — then commits to one concrete next step as a structured work order, grounded in your `magent.md` and everything it has learned from past sessions.
-2. **The executor** implements that work order as real code changes. Explores the codebase with the `read_file` tool if it needs more context from other project files.
-3. **The verifier** writes the changes to a fresh branch and typechecks them. If the types don't pass, the errors go back to the executor, which fixes its own work and tries again — up to three times. Code that can't be made to typecheck is never kept.
-4. **You and the agents converse.** Magent shows you the full diff; you can open it in VS Code or Ghostty, approve it, discard it, or **refine it in plain language** — "restore the original padding", "make the heading smaller". Each refinement runs back through execution, verification and updates the same branch, so you shape the change by talking to it.
-5. **It remembers.** When you approve, discard, or explain a rejection, Magent records it. Next session the planner reads that history — so it stops re-proposing what you turned down, builds on what you approved, and sharpens its sense of the project over time.
+- **Director** — sets the project's direction (the next ~3 features), reading your project's
+  long-term intent (`MAGENT.md`) and the history of what's been built. It writes the
+  direction the Planner follows.
+- **Planner** — turns the current direction into one concrete, shippable task.
+- **Executor** — implements the task on a fresh git branch.
 
-Every change lives on its own branch, verified and committed as a single clean commit. Magent never edits your working files directly and never keeps code that doesn't typecheck — your `main` is always untouched.
+You review and approve at each level. Nothing is committed to your main branch until you
+approve it, and Magent never pushes to your remote unless you turn that on.
 
-## What Magent keeps in `.magent/`
+## Safety
 
-Magent stores its per-project memory in a `.magent/` folder at the root of each project it works on. It's gitignored automatically — you don't have to manage it. Delete it to give Magent a clean slate.
+- The brain runs **entirely on your machine**. Your code never leaves your computer.
+- Magent works on a **separate branch** and only merges to `main` when you approve.
+- It does **not** push to your remote by default.
+- This repo is open source — read exactly what it does before you run it.
+
+## Setting direction (optional)
+
+Magent works without setup, but it proposes sharper direction when your project has a
+`MAGENT.md` in its root. See `MAGENT.example.md` for the shape — copy it, fill it in,
+and the Director reads it. You don't need one to start.
+
+## Links
+
+- [X / Twitter](https://x.com/leopalamim)
+- [Blog](https://palamim.com/)
+- [Agent Patterns](agent-patterns-link)
