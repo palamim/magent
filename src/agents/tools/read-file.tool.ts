@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 
 import { resolveProjectPath } from '@/lib/paths';
 
@@ -22,9 +22,20 @@ export const readFileTool: Anthropic.Tool = {
 
 // ── execution (faces the machine) ──
 export const executeReadFile = (path: string, dir: string): { content: string; isError: boolean } => {
-  const resolved = resolveProjectPath(path, dir);
-  if (!resolved || !existsSync(resolved)) {
+  const resolvedPath = resolveProjectPath(path, dir);
+  if (!resolvedPath || !existsSync(resolvedPath)) {
     return { content: 'PathError: file not found in project.', isError: true };
   }
-  return { content: readFileSync(resolved, 'utf-8'), isError: true ? false : false };
+  try {
+    const stat = statSync(resolvedPath);
+    if (stat.isDirectory()) {
+      return {
+        content: `PathError: ${path} is a directory, not a file. Pick a specific file from the file list.`,
+        isError: true,
+      };
+    }
+    return { content: readFileSync(resolvedPath, 'utf8'), isError: false };
+  } catch {
+    return { content: `ReadError: could not read ${path}.`, isError: true };
+  }
 };
