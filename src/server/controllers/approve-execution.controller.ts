@@ -9,12 +9,14 @@ export const handleApproveExecution = (req: Request, res: Response) => {
       dir,
       branch,
       plan,
+      push,
       refinements = [],
       note = '',
     } = req.body as {
       dir?: string;
       branch?: string;
       plan?: Plan;
+      push: boolean;
       refinements?: string[];
       note?: string;
     };
@@ -23,7 +25,7 @@ export const handleApproveExecution = (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing dir, branch, or plan.' });
     }
 
-    const result = approveExecution(dir, branch, plan, refinements, note);
+    const result = approveExecution(dir, branch, plan, push, refinements, note);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
