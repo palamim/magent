@@ -6,6 +6,7 @@ export const approveExecution = (
   dir: string,
   branch: string,
   plan: Plan,
+  push: boolean,
   refinements: string[],
   comment: string,
 ): { merged: boolean; pushed: boolean } => {
@@ -16,5 +17,5 @@ export const approveExecution = (
     decision: Decision.APPROVED,
     comment,
   });
-  return mergeExecution(dir, branch);
+  return mergeExecution(dir, branch, push);
 };
