@@ -53,16 +53,17 @@ export const discardBranch = (dir: string, branch: string): void => {
   run(`git branch -D ${branch}`, dir);
 };
 
-export const mergeExecution = (dir: string, branch: string): { merged: boolean; pushed: boolean } => {
+export const mergeExecution = (dir: string, branch: string, push: boolean): { merged: boolean; pushed: boolean } => {
   run(`git checkout main`, dir);
   run(`git merge ${branch}`, dir);
   run(`git branch -d ${branch}`, dir);
+  if (!push) return { merged: true, pushed: false };
   let pushed = false;
   try {
     run(`git push`, dir);
     pushed = true;
   } catch {
-    /* report, don't fail */
+    /* report */
   }
   return { merged: true, pushed };
 };
