@@ -7,6 +7,7 @@ export const buildImplementPrompt = (
   attemptsBlock: string,
   conventions: string,
   fileList: string,
+  feedback: string,
 ): string => `You are a senior software engineer for a builder, implementing the next step for their project.
 
 Your job: implement the work order below by editing the TARGET FILES. Below you'll find:
@@ -49,15 +50,24 @@ ${fileList}
 ${attemptsBlock}
 
 --- CONVENTIONS (project-specific conventions) ---
-${conventions}`;
+${conventions}
+
+--- PAST FEEDBACK (how your previous implementations were received) ---
+These are past implementations you delivered and how the builder reacted. Use them to
+repeat what landed well and avoid what didn't: if a kind of change was approved cleanly,
+trust that approach again; if implementations were discarded or needed corrections, learn
+from what the builder asked for and apply it preemptively here. Match the builder's
+demonstrated taste in how code is written, structured, and styled.
+${feedback}`;
 
 export const buildRefinePrompt = (
   plan: Plan,
   targetBlock: string,
   attemptsBlock: string,
-  feedbackBlock: string,
+  refinementsBlock: string,
   conventions: string,
   fileList: string,
+  feedback: string,
 ): string => `You are a senior software engineer for a builder, refining code you previously wrote for them.
 
 The builder reviewed the current code and asked for specific changes. Your job is NOT to re-implement
@@ -96,7 +106,7 @@ When you are done, deliver your changes by calling the submit_changes tool.
 ${targetBlock}
 
 --- REQUESTED CHANGES (most recent last) ---
-${feedbackBlock}
+${refinementsBlock}
 
 --- PROJECT FILE LIST (read any with read_file) ---
 ${fileList}
@@ -108,4 +118,10 @@ ${plan.instructions}
 ${attemptsBlock}
 
 --- CONVENTIONS (project-specific conventions) ---
-${conventions}`;
+${conventions}
+
+--- PAST FEEDBACK (how your previous implementations were received, for taste only) ---
+Background on the builder's demonstrated preferences from past work. The REQUESTED CHANGES
+above are what to do now — this is only context for matching their style. Do not re-apply
+old feedback as new changes; just let it inform how you write the code.
+${feedback}`;

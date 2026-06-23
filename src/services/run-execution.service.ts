@@ -17,11 +17,11 @@ export const executePlan = async (
   plan: Plan,
   client: Anthropic,
   dir: string,
-  feedback: string[],
+  refinements: string[],
   fileList: string,
 ): Promise<{ branch: string; status: string; diff: string }> => {
   const branch = deriveBranchName(plan.type, plan.slug);
-  const isRefine = feedback.length > 0;
+  const isRefine = refinements.length > 0;
   const exists = branchExists(dir, branch);
 
   if (isRefine) {
@@ -40,7 +40,7 @@ export const executePlan = async (
 
   try {
     const originals = new Map<string, string | null>();
-    const result = await runVerifiedExecution(plan, client, dir, branch, feedback, fileList, originals);
+    const result = await runVerifiedExecution(plan, client, dir, branch, refinements, fileList, originals);
     const diff = computeBranchDiff(dir, branch);
     run(`git checkout main`, dir);
     return { branch, status: result.status, diff };

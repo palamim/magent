@@ -17,7 +17,7 @@ export const runVerifiedExecution = async (
   client: Anthropic,
   dir: string,
   branch: string,
-  feedback: string[] = [],
+  refinements: string[] = [],
   fileList: string,
   originals: Map<string, string | null>,
 ): Promise<VerifiedExecution> => {
@@ -27,7 +27,7 @@ export const runVerifiedExecution = async (
   while (steps < MAX_EXEC_ATTEMPTS) {
     steps++;
 
-    const prompt = buildPrompt(plan, feedback, execAttempts, dir, fileList);
+    const prompt = buildPrompt(plan, refinements, execAttempts, dir, fileList);
     const execution = await runExecutor(client, prompt, dir);
 
     const unresolved = resolveAndCheckPaths(execution, dir);
@@ -49,9 +49,9 @@ export const runVerifiedExecution = async (
       continue;
     }
 
-    const isCommitted = commitExecution(dir, feedback, plan);
+    const isCommitted = commitExecution(dir, refinements, plan);
     if (!isCommitted) {
-      if (feedback.length === 0) {
+      if (refinements.length === 0) {
         execAttempts.push({ execution, errors: 'You submitted no changes.' });
         continue;
       }

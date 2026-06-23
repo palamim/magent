@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { openInTool, type InspectTool } from '@/lib/inspect';
 
-export const handleInspect = (req: Request, res: Response) => {
+export const handleInspectExecution = (req: Request, res: Response) => {
   try {
     const { dir, branch, tool } = req.body as { dir?: string; branch?: string; tool?: InspectTool };
     if (!dir || !branch || !tool) {

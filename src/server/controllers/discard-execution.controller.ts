@@ -9,13 +9,13 @@ export const handleDiscardExecution = (req: Request, res: Response) => {
       dir,
       branch,
       plan,
-      feedback = [],
+      refinements = [],
       note = '',
     } = req.body as {
       dir?: string;
       branch?: string;
       plan?: Plan;
-      feedback?: string[];
+      refinements?: string[];
       note?: string;
     };
 
@@ -23,7 +23,7 @@ export const handleDiscardExecution = (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing dir, branch, or plan.' });
     }
 
-    const result = discardExecution(dir, branch, plan, feedback, note);
+    const result = discardExecution(dir, branch, plan, refinements, note);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

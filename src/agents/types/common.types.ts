@@ -17,12 +17,13 @@ export interface Plan {
 export enum Decision {
   APPROVED = 'approved',
   DISCARDED = 'discarded',
+  REFINED = 'refined',
 }
 
 export interface FeedbackEntry {
   timestamp: string;
   proposal: string; // what the agent proposed
-  refinements: string[]; // refine messages given by the user during the loop
+  refinements: string[]; // refine messages given by the user during the loop (exclusive to the Executor)
   decision: Decision;
   comment: string; // closing feedback/note
 }

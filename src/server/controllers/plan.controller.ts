@@ -5,7 +5,7 @@ import { runPlanner } from '@/agents/planner';
 import { collectProjectFiles } from '@/lib/files';
 import { checkGitPreconditions } from '@/lib/git';
 
-export const handlePropose = async (req: Request, res: Response) => {
+export const handlePlan = async (req: Request, res: Response) => {
   try {
     const { dir } = req.body as { dir?: string };
     if (!dir) {
