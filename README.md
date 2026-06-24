@@ -19,7 +19,7 @@ cp .env.example .env        # then add your Anthropic API key to .env as ANTHROP
 npm run server              # serves on http://localhost:7842
 ```
 
-Then open the UI at **[your hosted UI URL]**, and click **Retry connection**. Your browser
+Then open the UI at **[Magent](https://magentweb.netlify.app/)**, and click **Retry connection**. Your browser
 will ask to allow access to your local network — click **Allow**. That's it.
 
 ## What you need
@@ -56,6 +56,6 @@ and the Director reads it. You don't need one to start.
 
 ## Links
 
-- [X / Twitter](https://x.com/leopalamim)
+- [X](https://x.com/leopalamim)
 - [Blog](https://palamim.com/)
-- [Agent Patterns](agent-patterns-link)
+- [Agent Patterns](https://agentpatterns.netlify.app/)
