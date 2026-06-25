@@ -18,9 +18,11 @@ export const handlePlan = async (req: Request, res: Response) => {
     const files = collectProjectFiles(dir);
     const fileList = files.join('\n');
 
-    const plan = await runPlanner(fileList, client, dir);
-
-    return res.json({ plan });
+    const result = await runPlanner(fileList, client, dir);
+    if (result.kind === 'feature-complete') {
+      return res.json({ status: 'feature-complete', goal: result.goal });
+    }
+    return res.json({ plan: result.plan });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return res.status(500).json({ error: message });
