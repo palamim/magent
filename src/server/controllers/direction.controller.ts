@@ -6,6 +6,8 @@ import { runDirector } from '@/agents/director/director.agent';
 import { loadDirection } from '@/project/direction';
 import { loadConventions } from '@/project/conventions';
 import { computeTextDiff } from '@/lib/text-diff';
+import { ensureProjectInitialized } from '@/project/init';
+import { checkGitPreconditions } from '@/lib/git';
 
 export const handleDirection = async (req: Request, res: Response) => {
   try {
@@ -15,6 +17,9 @@ export const handleDirection = async (req: Request, res: Response) => {
     if (!dir) {
       return res.status(400).json({ error: 'Missing dir.' });
     }
+
+    ensureProjectInitialized(dir);
+    checkGitPreconditions(dir);
 
     const client = new Anthropic();
     const files = collectProjectFiles(dir);

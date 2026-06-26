@@ -4,6 +4,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { collectProjectFiles } from '@/lib/files';
 import type { Plan } from '@/agents/types/common.types';
 import { executePlan } from '@/services/run-execution.service';
+import { ensureProjectInitialized } from '@/project/init';
+import { checkGitPreconditions } from '@/lib/git';
 
 export const handleExecute = async (req: Request, res: Response) => {
   try {
@@ -19,6 +21,9 @@ export const handleExecute = async (req: Request, res: Response) => {
     if (!dir || !plan) {
       return res.status(400).json({ error: 'Missing dir or plan.' });
     }
+
+    ensureProjectInitialized(dir);
+    checkGitPreconditions(dir);
 
     const client = new Anthropic();
     const files = collectProjectFiles(dir);

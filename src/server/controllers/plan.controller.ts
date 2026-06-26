@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { runPlanner } from '@/agents/planner';
 import { collectProjectFiles } from '@/lib/files';
 import { checkGitPreconditions } from '@/lib/git';
+import { ensureProjectInitialized } from '@/project/init';
 
 export const handlePlan = async (req: Request, res: Response) => {
   try {
@@ -12,6 +13,7 @@ export const handlePlan = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing "dir" — the project path to run Magent in.' });
     }
 
+    ensureProjectInitialized(dir);
     checkGitPreconditions(dir);
 
     const client = new Anthropic();
