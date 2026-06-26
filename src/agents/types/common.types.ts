@@ -50,5 +50,6 @@ export interface TaskPlan {
   goal: string; // one-line: what this whole plan achieves
   type: string; // feat/fix/etc for the eventual commits
   slug: string; // kebab, for branch/commit naming
+  dependencies: string[]; // npm packages installed before execution
   tasks: Task[];
 }

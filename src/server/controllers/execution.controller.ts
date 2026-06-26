@@ -6,6 +6,7 @@ import type { Plan } from '@/agents/types/common.types';
 import { executePlan } from '@/services/run-execution.service';
 import { ensureProjectInitialized } from '@/project/init';
 import { checkGitPreconditions } from '@/lib/git';
+import { loadPlan } from '@/project/plan';
 
 export const handleExecute = async (req: Request, res: Response) => {
   try {
@@ -22,6 +23,9 @@ export const handleExecute = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing dir or plan.' });
     }
 
+    const taskPlan = loadPlan(dir);
+    const dependencies = taskPlan?.dependencies ?? [];
+
     ensureProjectInitialized(dir);
     checkGitPreconditions(dir);
 
@@ -29,7 +33,7 @@ export const handleExecute = async (req: Request, res: Response) => {
     const files = collectProjectFiles(dir);
     const fileList = files.join('\n');
 
-    const result = await executePlan(plan, client, dir, refinements, fileList);
+    const result = await executePlan(plan, client, dir, refinements, fileList, dependencies);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

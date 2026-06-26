@@ -46,7 +46,13 @@ export const submitPlanTool: Anthropic.Tool = {
         type: 'string',
         description: 'Id of the next pending task to run. Empty string if every task is done.',
       },
+      dependencies: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'npm packages this feature requires that are not already installed (e.g. ["highlight.js"]). These are installed automatically before execution — do NOT create tasks to install them. Empty array if none.',
+      },
     },
-    required: ['frontier', 'goal', 'type', 'slug', 'tasks', 'nextTaskId'],
+    required: ['frontier', 'goal', 'type', 'slug', 'tasks', 'nextTaskId', 'dependencies'],
   },
 };

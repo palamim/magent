@@ -25,6 +25,7 @@ export const readSubmitPlan = (message: Anthropic.Messages.Message): SubmittedPl
       status?: string;
     }>;
     nextTaskId?: string;
+    dependencies?: string[];
   };
 
   const plan: TaskPlan = {
@@ -32,6 +33,7 @@ export const readSubmitPlan = (message: Anthropic.Messages.Message): SubmittedPl
     goal: input.goal ?? '',
     type: input.type ?? 'chore',
     slug: input.slug ?? 'untitled',
+    dependencies: Array.isArray(input.dependencies) ? input.dependencies : [],
     tasks: (input.tasks ?? []).map((t) => ({
       id: t.id ?? '',
       slug: t.slug ?? t.id ?? 'task',

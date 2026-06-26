@@ -3,6 +3,7 @@ import { run, computeBranchDiff } from '@/lib/git';
 import { deriveBranchName } from '@/lib/git';
 import type { Plan } from '@/agents/types/common.types';
 import { runVerifiedExecution } from '@/services/run-verified-execution';
+import { installDependencies } from '@/lib/deps';
 
 const branchExists = (dir: string, branch: string): boolean => {
   try {
@@ -19,6 +20,7 @@ export const executePlan = async (
   dir: string,
   refinements: string[],
   fileList: string,
+  dependencies: string[],
 ): Promise<{ branch: string; status: string; diff: string }> => {
   const branch = deriveBranchName(plan.type, plan.slug);
   const isRefine = refinements.length > 0;
@@ -36,6 +38,7 @@ export const executePlan = async (
       );
     }
     run(`git checkout -b ${branch}`, dir);
+    installDependencies(dir, dependencies);
   }
 
   try {

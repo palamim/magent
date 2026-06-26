@@ -13,8 +13,10 @@ frontier. A small feature may be a single task; a larger one several tasks. The 
 you again for the NEXT feature when this one is done.
 
 Break the feature into tasks where each task is small enough for the Executor to implement and
-ship in a single run — prefer 1-3 files per task. Sequence tasks so dependencies come first
-(e.g. "install the lib", then "create the renderer", then "wire it in"). Do not cram the feature
+ship in a single run — prefer 1-3 files per task. If the feature needs npm packages that aren't
+already installed, list them in the plan's "dependencies" field — they are installed automatically
+before execution. Do NOT create a task to install them. Sequence the actual work tasks so dependencies
+of logic come first (e.g. "create the renderer", then "wire it in"). Do not cram the feature
 into one giant task; do not pad it with artificial busywork. The smallest set of real tasks that
 genuinely ships the feature.
 
