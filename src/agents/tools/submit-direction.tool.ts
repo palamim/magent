@@ -18,7 +18,8 @@ export const submitDirectionTool: Anthropic.Tool = {
       },
       direction: {
         type: 'string',
-        description: 'The full new content for direction.md — the concrete frontier for the planner (≈3 features).',
+        description:
+          'The full new content for direction.md — the current frontier: the single most important direction of travel for the project right now, argued with reasoning and boundaries. Not a list of features.',
       },
       conventions: {
         type: 'string',
