@@ -1,12 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { TaskStatus, type TaskPlan } from '@/agents/types/common.types';
+import { TaskStatus, type Plan, type Task } from '@/agents/types/common.types';
 
-export interface SubmittedPlan {
-  plan: TaskPlan;
-  nextTaskId: string;
-}
-
-export const readSubmitPlan = (message: Anthropic.Messages.Message): SubmittedPlan | null => {
+export const readSubmitPlan = (message: Anthropic.Messages.Message): Plan | null => {
   const toolUse = message.content.find((b) => b.type === 'tool_use' && b.name === 'submit_plan');
   if (!toolUse || toolUse.type !== 'tool_use') return null;
 
@@ -15,28 +10,20 @@ export const readSubmitPlan = (message: Anthropic.Messages.Message): SubmittedPl
     goal?: string;
     type?: string;
     slug?: string;
-    tasks?: Array<{
-      id?: string;
-      slug: string;
-      description?: string;
-      instructions?: string;
-      targetFiles?: string[];
-      contextFiles?: string[];
-      status?: string;
-    }>;
-    nextTaskId?: string;
     dependencies?: string[];
+    tasks?: Array<Task>;
   };
 
-  const plan: TaskPlan = {
+  return {
     frontier: input.frontier ?? '',
     goal: input.goal ?? '',
     type: input.type ?? 'chore',
     slug: input.slug ?? 'untitled',
     dependencies: Array.isArray(input.dependencies) ? input.dependencies : [],
     tasks: (input.tasks ?? []).map((t) => ({
-      id: t.id ?? '',
-      slug: t.slug ?? t.id ?? 'task',
+      id: typeof t.id === 'number' ? t.id : Number(t.id) || 0,
+      slug: t.slug ?? 'task',
+      type: t.type ?? 'chore',
       description: t.description ?? '',
       instructions: t.instructions ?? '',
       targetFiles: Array.isArray(t.targetFiles) ? t.targetFiles : [],
@@ -44,6 +31,4 @@ export const readSubmitPlan = (message: Anthropic.Messages.Message): SubmittedPl
       status: t.status === 'done' ? TaskStatus.DONE : TaskStatus.PENDING,
     })),
   };
-
-  return { plan, nextTaskId: input.nextTaskId ?? '' };
 };

@@ -48,12 +48,21 @@ export const checkGitPreconditions = (dir: string): void => {
   }
 };
 
-export const discardBranch = (dir: string, branch: string): void => {
-  run(`git checkout main`, dir);
-  run(`git branch -D ${branch}`, dir);
+export const branchExists = (dir: string, branch: string): boolean => {
+  try {
+    run(`git rev-parse --verify ${branch}`, dir);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
-export const mergeExecution = (dir: string, branch: string, push: boolean): { merged: boolean; pushed: boolean } => {
+export const discardLastCommit = (dir: string, branch: string): void => {
+  run(`git checkout ${branch}`, dir);
+  run(`git reset --hard HEAD~1`, dir); // undo the last commit + its changes
+};
+
+export const mergePlan = (dir: string, branch: string, push: boolean): { merged: boolean; pushed: boolean } => {
   run(`git checkout main`, dir);
   run(`git merge ${branch}`, dir);
   run(`git branch -d ${branch}`, dir);
@@ -63,7 +72,12 @@ export const mergeExecution = (dir: string, branch: string, push: boolean): { me
     run(`git push`, dir);
     pushed = true;
   } catch {
-    /* report */
+    /* push is best-effort; report not-pushed */
   }
   return { merged: true, pushed };
+};
+
+export const discardBranch = (dir: string, branch: string): void => {
+  run(`git checkout main`, dir);
+  run(`git branch -D ${branch}`, dir);
 };

@@ -14,15 +14,15 @@ export const loadFeedback = (dir: string, agent: Agent): string => {
       const refined = entry.refinements.length ? ` After refinements: ${entry.refinements.join('; ')}.` : '';
 
       if (entry.decision === Decision.APPROVED) {
-        const comment = entry.comment ? ` Builder noted: "${entry.comment}".` : '';
+        const comment = entry.comment ? ` Builder commented: "${entry.comment}".` : '';
         return `- Approved "${entry.proposal}".${refined}${comment}`;
       }
       if (entry.decision === Decision.REFINED) {
         // the proposal was reworked — the comment is WHY, and a new proposal followed
-        return `- Refined "${entry.proposal}" — builder noted: "${entry.comment}".`;
+        return `- Refined "${entry.proposal}" — builder commented: "${entry.comment}".`;
       }
       // DISCARDED
-      if (entry.comment) return `- Discarded "${entry.proposal}" — builder noted: "${entry.comment}".${refined}`;
+      if (entry.comment) return `- Discarded "${entry.proposal}" — builder commented: "${entry.comment}".${refined}`;
       return `- Discarded "${entry.proposal}" (no reason given).${refined}`;
     })
     .join('\n');

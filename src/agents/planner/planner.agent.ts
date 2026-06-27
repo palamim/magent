@@ -5,31 +5,26 @@ import { submitPlanTool } from '@/agents/tools/submit-plan.tool';
 import { dispatchToolCalls } from '@/agents/tools/dispatch';
 import { freshPlanPrompt, advancePrompt } from '@/agents/planner/planner.prompt';
 import { readSubmitPlan } from '@/agents/planner/utils/read-submit-plan';
-import { Agent, TaskStatus, type Plan, type Task, type TaskPlan } from '@/agents/types/common.types';
+import { Agent, TaskStatus, type Plan, type Task } from '@/agents/types/common.types';
 import { loadFeedback } from '@/project/feedback';
 import { loadDirection } from '@/project/direction';
 import { loadConventions } from '@/project/conventions';
 import { loadPlan, writePlan, archivePlan } from '@/project/plan';
+import { writeTask, clearTask } from '@/project/task';
 
 const MAX_PLANNER_STEPS = 10;
 const MAX_PLANNER_TOKENS = 4096;
 
-const allDone = (plan: TaskPlan): boolean => plan.tasks.every((t) => t.status === TaskStatus.DONE);
+const allDone = (plan: Plan): boolean => plan.tasks.every((t) => t.status === TaskStatus.DONE);
+const nextPendingTask = (plan: Plan): Task | null => {
+  const pending = plan.tasks.filter((t) => t.status === TaskStatus.PENDING);
+  if (pending.length === 0) return null;
+  return pending.sort((a, b) => a.id - b.id)[0] ?? null;
+};
 
-const taskToPlan = (task: Task, planType: string): Plan => ({
-  description: task.description,
-  type: planType,
-  slug: task.slug,
-  targetFiles: task.targetFiles,
-  contextFiles: task.contextFiles,
-  instructions: task.instructions,
-  taskId: task.id,
-});
+export type PlanResponse = { kind: 'task' } | { kind: 'feature-complete'; goal: string };
 
-// the planner's outcome: either a task to run, or a signal that the feature is complete
-export type PlannerResult = { kind: 'task'; plan: Plan } | { kind: 'feature-complete'; goal: string };
-
-const runModelLoop = async (prompt: string, client: Anthropic, dir: string) => {
+const runModelLoop = async (prompt: string, client: Anthropic, dir: string): Promise<Plan> => {
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
   let steps = 0;
   while (steps < MAX_PLANNER_STEPS) {
@@ -43,7 +38,7 @@ const runModelLoop = async (prompt: string, client: Anthropic, dir: string) => {
     messages.push({ role: 'assistant', content: message.content });
 
     const submitted = readSubmitPlan(message);
-    if (submitted) return submitted; // { plan, nextTaskId }
+    if (submitted) return submitted;
 
     if (message.stop_reason !== 'tool_use') {
       throw new Error('Planner stopped without calling submit_plan.');
@@ -53,7 +48,7 @@ const runModelLoop = async (prompt: string, client: Anthropic, dir: string) => {
   throw new Error('Planner ended loop without submitting a plan (hit MAX_PLANNER_STEPS).');
 };
 
-export const runPlanner = async (fileList: string, client: Anthropic, dir: string): Promise<PlannerResult> => {
+export const runPlanner = async (fileList: string, client: Anthropic, dir: string): Promise<PlanResponse> => {
   const conventions = loadConventions(dir);
   const plannerFeedback = loadFeedback(dir, Agent.PLANNER);
   const executorFeedback = loadFeedback(dir, Agent.EXECUTOR);
@@ -63,11 +58,12 @@ export const runPlanner = async (fileList: string, client: Anthropic, dir: strin
   if (!existing) {
     const direction = loadDirection(dir);
     const prompt = freshPlanPrompt(direction, fileList, conventions, plannerFeedback, executorFeedback);
-    const { plan } = await runModelLoop(prompt, client, dir);
+    const plan = await runModelLoop(prompt, client, dir);
     writePlan(dir, plan);
-    const next = plan.tasks.find((t) => t.status === TaskStatus.PENDING);
+    const next = nextPendingTask(plan);
     if (!next) throw new Error('Fresh plan has no pending tasks.');
-    return { kind: 'task', plan: taskToPlan(next, plan.type) };
+    writeTask(dir, next);
+    return { kind: 'task' };
   }
 
   // ADVANCE MODE — re-ground the existing plan, mark done, pick next
@@ -78,16 +74,17 @@ export const runPlanner = async (fileList: string, client: Anthropic, dir: strin
     plannerFeedback,
     executorFeedback,
   );
-  const { plan } = await runModelLoop(prompt, client, dir);
+  const plan = await runModelLoop(prompt, client, dir);
   writePlan(dir, plan);
 
-  // after writing: is the feature now fully done?
   if (allDone(plan)) {
-    archivePlan(dir, plan); // move the finished plan to archive
-    return { kind: 'feature-complete', goal: plan.goal }; // stop-and-signal
+    archivePlan(dir, plan);
+    clearTask(dir);
+    return { kind: 'feature-complete', goal: plan.goal };
   }
 
-  const next = plan.tasks.find((t) => t.status === TaskStatus.PENDING);
+  const next = nextPendingTask(plan);
   if (!next) throw new Error('Plan not allDone but no pending task found.');
-  return { kind: 'task', plan: taskToPlan(next, plan.type) };
+  writeTask(dir, next);
+  return { kind: 'task' };
 };

@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 
-import type { Plan } from '@/agents/types/common.types';
 import { discardExecution } from '@/services/discard-execution.service';
 
 export const handleDiscardExecution = (req: Request, res: Response) => {
@@ -8,22 +7,20 @@ export const handleDiscardExecution = (req: Request, res: Response) => {
     const {
       dir,
       branch,
-      plan,
       refinements = [],
-      note = '',
+      comment = '',
     } = req.body as {
       dir?: string;
       branch?: string;
-      plan?: Plan;
       refinements?: string[];
-      note?: string;
+      comment?: string;
     };
 
-    if (!dir || !branch || !plan) {
-      return res.status(400).json({ error: 'Missing dir, branch, or plan.' });
+    if (!dir || !branch) {
+      return res.status(400).json({ error: 'Missing dir or branch.' });
     }
 
-    const result = discardExecution(dir, branch, plan, refinements, note);
+    const result = discardExecution(dir, branch, refinements, comment);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

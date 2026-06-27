@@ -1,21 +1,24 @@
-import { discardBranch, run } from '@/lib/git';
-import { Agent, Decision, type Plan } from '@/agents/types/common.types';
+import { discardLastCommit } from '@/lib/git';
+import { Agent, Decision } from '@/agents/types/common.types';
 import { saveFeedback } from '@/project/feedback';
+import { clearTask, loadTask } from '@/project/task';
 
 export const discardExecution = (
   dir: string,
   branch: string,
-  plan: Plan,
   refinements: string[],
   comment: string,
 ): { discarded: boolean } => {
+  const task = loadTask(dir);
+  if (!task) throw new Error('No task to discard.');
   saveFeedback(dir, Agent.EXECUTOR, {
     timestamp: new Date().toISOString(),
-    proposal: `${plan.slug}: ${plan.description}`,
+    proposal: `${task.slug}: ${task.description}`,
     refinements,
     decision: Decision.DISCARDED,
     comment,
   });
-  discardBranch(dir, branch);
+  discardLastCommit(dir, branch);
+  clearTask(dir);
   return { discarded: true };
 };

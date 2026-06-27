@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 import { cleanup, run } from '@/lib/git';
 import { typecheck } from '@/lib/verification';
-import type { Plan } from '@/agents/types/common.types';
+import type { Task } from '@/agents/types/common.types';
 import { runExecutor } from '@/agents/executor';
 import type { ExecAttempt, VerifiedExecution } from '@/services/types/common.types';
 import { buildPrompt } from '@/services/run-verified-execution/build-prompt';
@@ -13,7 +13,7 @@ import { commitExecution } from '@/services/run-verified-execution/commit-execut
 const MAX_EXEC_ATTEMPTS = 3;
 
 export const runVerifiedExecution = async (
-  plan: Plan,
+  task: Task,
   client: Anthropic,
   dir: string,
   branch: string,
@@ -27,7 +27,7 @@ export const runVerifiedExecution = async (
   while (steps < MAX_EXEC_ATTEMPTS) {
     steps++;
 
-    const prompt = buildPrompt(plan, refinements, execAttempts, dir, fileList);
+    const prompt = buildPrompt(task, refinements, execAttempts, dir, fileList);
     const execution = await runExecutor(client, prompt, dir);
 
     const unresolved = resolveAndCheckPaths(execution, dir);
@@ -49,7 +49,7 @@ export const runVerifiedExecution = async (
       continue;
     }
 
-    const isCommitted = commitExecution(dir, refinements, plan);
+    const isCommitted = commitExecution(dir, refinements, task);
     if (!isCommitted) {
       if (refinements.length === 0) {
         execAttempts.push({ execution, errors: 'You submitted no changes.' });

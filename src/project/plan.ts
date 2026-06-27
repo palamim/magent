@@ -1,24 +1,24 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { Agent, type TaskPlan } from '@/agents/types/common.types';
+import { Agent, type Plan } from '@/agents/types/common.types';
 import { agentFilePath, ensureAgentDir } from '@/project/agent-files';
 
 const PLAN_FILE = 'plan.json';
 const ARCHIVE_DIR = 'archive';
 
-export const loadPlan = (dir: string): TaskPlan | null => {
+export const loadPlan = (dir: string): Plan | null => {
   const path = agentFilePath(dir, Agent.PLANNER, PLAN_FILE);
   if (!existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, 'utf-8')) as TaskPlan;
+  return JSON.parse(readFileSync(path, 'utf-8')) as Plan;
 };
 
-export const writePlan = (dir: string, plan: TaskPlan): void => {
+export const writePlan = (dir: string, plan: Plan): void => {
   ensureAgentDir(dir, Agent.PLANNER);
   writeFileSync(agentFilePath(dir, Agent.PLANNER, PLAN_FILE), JSON.stringify(plan, null, 2), 'utf8');
 };
 
-export const archivePlan = (dir: string, plan: TaskPlan): void => {
+export const archivePlan = (dir: string, plan: Plan): void => {
   const agentPath = ensureAgentDir(dir, Agent.PLANNER);
   const archivePath = join(agentPath, ARCHIVE_DIR);
   mkdirSync(archivePath, { recursive: true });

@@ -1,7 +1,7 @@
-import { type Plan } from '@/agents/types/common.types';
+import { type Task } from '@/agents/types/common.types';
 
 export const buildImplementPrompt = (
-  plan: Plan,
+  task: Task,
   targetBlock: string,
   contextBlock: string,
   attemptsBlock: string,
@@ -32,10 +32,10 @@ Change only what the instructions require; preserve all existing formatting, imp
 explicitly changing.
 
 --- DESCRIPTION ---
-${plan.description}
+${task.description}
 
 --- INSTRUCTIONS ---
-${plan.instructions}
+${task.instructions}
 
 --- TARGET FILES (content included) ---
 ${targetBlock}
@@ -61,7 +61,7 @@ demonstrated taste in how code is written, structured, and styled.
 ${feedback}`;
 
 export const buildRefinePrompt = (
-  plan: Plan,
+  task: Task,
   targetBlock: string,
   attemptsBlock: string,
   refinementsBlock: string,
@@ -112,7 +112,7 @@ ${refinementsBlock}
 ${fileList}
 
 --- BACKGROUND (original task — do NOT re-execute, context only) ---
-${plan.instructions}
+${task.instructions}
 
 --- ATTEMPTS (previous failures to fix) ---
 ${attemptsBlock}

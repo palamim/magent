@@ -4,7 +4,7 @@ import { saveFeedback } from '@/project/feedback';
 export const refinePlan = (dir: string, plan: Plan, comment: string): { recorded: boolean } => {
   saveFeedback(dir, Agent.PLANNER, {
     timestamp: new Date().toISOString(),
-    proposal: `${plan.slug}: ${plan.description}`,
+    proposal: `${plan.slug}: ${plan.goal}`,
     refinements: [],
     decision: Decision.REFINED,
     comment,

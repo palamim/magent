@@ -4,17 +4,6 @@ export enum Agent {
   EXECUTOR = 'executor',
 }
 
-// --- Planner Agent returns — Executor Agent uses ---
-export interface Plan {
-  description: string;
-  type: string;
-  slug: string;
-  targetFiles: string[];
-  contextFiles: string[];
-  instructions: string;
-  taskId?: string;
-}
-
 export enum Decision {
   APPROVED = 'approved',
   DISCARDED = 'discarded',
@@ -26,7 +15,7 @@ export interface FeedbackEntry {
   proposal: string; // what the agent proposed
   refinements: string[]; // refine messages given by the user during the loop (exclusive to the Executor)
   decision: Decision;
-  comment: string; // closing feedback/note
+  comment: string; // closing feedback comment
 }
 
 export enum TaskStatus {
@@ -35,8 +24,9 @@ export enum TaskStatus {
 }
 
 export interface Task {
-  id: string;
+  id: number;
   slug: string;
+  type: string;
   description: string;
   instructions: string;
   targetFiles: string[];
@@ -45,7 +35,7 @@ export interface Task {
 }
 
 // the Planner's persistent multi-run plan (lives in planner/plan.json)
-export interface TaskPlan {
+export interface Plan {
   frontier: string; // the slice of direction.md this plan serves (so we know when to replan)
   goal: string; // one-line: what this whole plan achieves
   type: string; // feat/fix/etc for the eventual commits

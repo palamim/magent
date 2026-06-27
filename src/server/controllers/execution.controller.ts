@@ -2,29 +2,25 @@ import type { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 
 import { collectProjectFiles } from '@/lib/files';
-import type { Plan } from '@/agents/types/common.types';
-import { executePlan } from '@/services/run-execution.service';
+import { executeTask } from '@/services/run-execution.service';
 import { ensureProjectInitialized } from '@/project/init';
-import { checkGitPreconditions } from '@/lib/git';
+import { checkGitPreconditions, deriveBranchName } from '@/lib/git';
 import { loadPlan } from '@/project/plan';
+import { loadTask } from '@/project/task';
 
 export const handleExecute = async (req: Request, res: Response) => {
   try {
-    const {
-      dir,
-      plan,
-      refinements = [],
-    } = req.body as {
-      dir?: string;
-      plan?: Plan;
-      refinements?: string[];
-    };
-    if (!dir || !plan) {
-      return res.status(400).json({ error: 'Missing dir or plan.' });
-    }
+    const { dir, refinements = [] } = req.body as { dir?: string; refinements?: string[] };
+    if (!dir) return res.status(400).json({ error: 'Missing dir.' });
 
-    const taskPlan = loadPlan(dir);
-    const dependencies = taskPlan?.dependencies ?? [];
+    const plan = loadPlan(dir);
+    if (!plan) return res.status(400).json({ error: 'No active plan.' });
+
+    const task = loadTask(dir);
+    if (!task) return res.status(400).json({ error: 'No task to run.' });
+
+    const branch = deriveBranchName(plan.type, plan.slug);
+    const dependencies = plan.dependencies ?? [];
 
     ensureProjectInitialized(dir);
     checkGitPreconditions(dir);
@@ -33,7 +29,7 @@ export const handleExecute = async (req: Request, res: Response) => {
     const files = collectProjectFiles(dir);
     const fileList = files.join('\n');
 
-    const result = await executePlan(plan, client, dir, refinements, fileList, dependencies);
+    const result = await executeTask(task, client, dir, refinements, fileList, dependencies, branch);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

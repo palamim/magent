@@ -1,27 +1,24 @@
 import type { Request, Response } from 'express';
 
-import type { Plan } from '@/agents/types/common.types';
-import { approvePlan } from '@/services/approve-plan.service';
+import { keepExecution } from '@/services/keep-execution.service';
 
-export const handleApprovePlan = (req: Request, res: Response) => {
+export const handleKeepExecution = (req: Request, res: Response) => {
   try {
     const {
       dir,
-      plan,
       refinements = [],
       comment = '',
     } = req.body as {
       dir?: string;
-      plan?: Plan;
       refinements?: string[];
       comment?: string;
     };
 
-    if (!dir || !plan) {
-      return res.status(400).json({ error: 'Missing dir or plan.' });
+    if (!dir) {
+      return res.status(400).json({ error: 'Missing dir.' });
     }
 
-    const result = approvePlan(dir, plan, refinements, comment);
+    const result = keepExecution(dir, refinements, comment);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

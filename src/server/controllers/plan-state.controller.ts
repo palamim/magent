@@ -7,7 +7,7 @@ export const handlePlanState = (req: Request, res: Response) => {
     if (!dir) {
       return res.status(400).json({ error: 'Missing "dir".' });
     }
-    const plan = loadPlan(dir); // TaskPlan | null
+    const plan = loadPlan(dir);
     return res.json({ plan });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
