@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, appendFileSync } from 'node:fs';
+import { existsSync, readFileSync, appendFileSync, writeFileSync } from 'node:fs';
 import { Agent, Decision, type FeedbackEntry } from '@/agents/types/common.types';
 import { ensureAgentDir, agentFilePath } from '@/project/agent-files';
 
@@ -31,4 +31,19 @@ export const loadFeedback = (dir: string, agent: Agent): string => {
 export const saveFeedback = (dir: string, agent: Agent, entry: FeedbackEntry) => {
   ensureAgentDir(dir, agent);
   appendFileSync(agentFilePath(dir, agent, FEEDBACK_FILE), JSON.stringify(entry) + '\n', 'utf8');
+};
+
+export const appendCommentToLast = (dir: string, agent: Agent, comment: string): void => {
+  const path = agentFilePath(dir, agent, FEEDBACK_FILE);
+  if (!existsSync(path)) return;
+
+  const lines = readFileSync(path, 'utf8').trim().split('\n').filter(Boolean);
+  if (lines.length === 0) return;
+
+  const entries = lines.map((line) => JSON.parse(line) as FeedbackEntry);
+  const last = entries[entries.length - 1];
+  if (!last) return;
+  last.comment = comment;
+
+  writeFileSync(path, entries.map((e) => JSON.stringify(e)).join('\n') + '\n', 'utf8');
 };

@@ -9,6 +9,7 @@ import { planRouter } from '@/server/routes/plan.route';
 import { executionRouter } from '@/server/routes/execution.route';
 import { browseRouter } from '@/server/routes/browse.route';
 import { projectSetupRouter } from '@/server/routes/project-setup.route';
+import { feedbackRouter } from '@/server/routes/feedback.route';
 
 const app = express();
 const PORT = process.env['MAGENT_SERVER_PORT'] ?? 7842;
@@ -23,6 +24,7 @@ app.use('/api', planRouter);
 app.use('/api', executionRouter);
 app.use('/api', browseRouter);
 app.use('/api', projectSetupRouter);
+app.use('/api', feedbackRouter);
 
 app.listen(PORT, () => {
   console.log(`Magent server listening on http://localhost:${PORT}`);
