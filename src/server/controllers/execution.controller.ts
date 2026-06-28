@@ -7,6 +7,7 @@ import { ensureProjectInitialized } from '@/project/init';
 import { checkGitPreconditions, deriveBranchName } from '@/lib/git';
 import { loadPlan } from '@/project/plan';
 import { loadTask } from '@/project/task';
+import { loadConfig } from '@/project/config';
 
 export const handleExecute = async (req: Request, res: Response) => {
   try {
@@ -28,7 +29,9 @@ export const handleExecute = async (req: Request, res: Response) => {
     const files = collectProjectFiles(dir);
     const fileList = files.join('\n');
 
-    const result = await executeTask(task, anthropic, dir, refinements, fileList, dependencies, branch);
+    const { baseBranch } = loadConfig(dir);
+
+    const result = await executeTask(task, anthropic, dir, refinements, fileList, dependencies, branch, baseBranch);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

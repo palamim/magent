@@ -1,8 +1,9 @@
 import { existsSync, readFileSync, appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { run } from '@/lib/git';
 
+import { run } from '@/lib/git';
 import { loadDirection, writeDirection } from '@/project/direction';
+import { loadConfig, writeConfig } from '@/project/config';
 
 const MAGENT_IGNORE = '.magent/';
 const STARTER_DIRECTION = `# direction.md
@@ -25,6 +26,12 @@ When you're ready for Magent to do meaningful work, set a real direction with th
 export const ensureProjectInitialized = (dir: string): void => {
   ensureGitignored(dir);
   ensureStarterDirection(dir);
+  ensureConfig(dir);
+};
+
+const ensureConfig = (dir: string): void => {
+  const path = join(dir, '.magent', 'config.json');
+  if (!existsSync(path)) writeConfig(dir, loadConfig(dir));
 };
 
 const ensureStarterDirection = (dir: string): void => {

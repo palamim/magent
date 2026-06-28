@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { loadPlan } from '@/project/plan';
 import { loadTask, isTaskDeciding } from '@/project/task';
 import { deriveBranchName, computeBranchDiff } from '@/lib/git';
+import { loadConfig } from '@/project/config';
 
 export const handleBranchDiff = (req: Request, res: Response) => {
   try {
@@ -13,12 +14,13 @@ export const handleBranchDiff = (req: Request, res: Response) => {
     const task = loadTask(dir);
     if (!plan) return res.json({ diff: '', deciding: false });
 
+    const { baseBranch } = loadConfig(dir);
     const branch = deriveBranchName(plan.type, plan.slug);
 
     let diff = '';
     let deciding = false;
     try {
-      diff = computeBranchDiff(dir, branch);
+      diff = computeBranchDiff(dir, branch, baseBranch);
       if (task) deciding = isTaskDeciding(dir, branch, task);
     } catch {
       // branch doesn't exist yet (nothing run) — empty diff, not deciding

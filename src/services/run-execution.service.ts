@@ -12,24 +12,26 @@ export const executeTask = async (
   fileList: string,
   dependencies: string[],
   branch: string,
+  base: string,
 ): Promise<{ branch: string; status: string; diff: string }> => {
   const exists = branchExists(dir, branch);
 
   if (exists) {
     run(`git checkout ${branch}`, dir);
   } else {
-    run(`git checkout -b ${branch}`, dir);
+    run(`git checkout ${base}`, dir);
+    run(`git checkout -b ${branch} ${base}`, dir);
     installDependencies(dir, dependencies);
   }
 
   try {
     const originals = new Map<string, string | null>();
     const result = await runVerifiedExecution(task, client, dir, branch, refinements, fileList, originals);
-    const diff = computeBranchDiff(dir, branch);
+    const diff = computeBranchDiff(dir, branch, base);
     return { branch, status: result.status, diff };
   } catch (error) {
     if (!exists) {
-      run(`git checkout main`, dir);
+      run(`git checkout ${base}`, dir);
       try {
         run(`git branch -D ${branch}`, dir);
       } catch {}

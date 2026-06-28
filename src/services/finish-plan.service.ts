@@ -3,12 +3,14 @@ import { loadPlan, archivePlan } from '@/project/plan';
 import { deriveBranchName } from '@/lib/git';
 import { saveFeedback } from '@/project/feedback';
 import { Agent, Decision } from '@/agents/types/common.types';
+import { loadConfig } from '@/project/config';
 
-export const finishPlan = (dir: string, push: boolean, comment: string): { merged: boolean; pushed: boolean } => {
+export const finishPlan = (dir: string, comment: string): { merged: boolean; pushed: boolean } => {
   const plan = loadPlan(dir);
   if (!plan) return { merged: false, pushed: false };
+  const { baseBranch, autoPush } = loadConfig(dir);
   const branch = deriveBranchName(plan.type, plan.slug);
-  const result = mergePlan(dir, branch, push);
+  const result = mergePlan(dir, branch, baseBranch, autoPush);
   saveFeedback(dir, Agent.PLANNER, {
     timestamp: new Date().toISOString(),
     proposal: `${plan.slug}: ${plan.goal}`,

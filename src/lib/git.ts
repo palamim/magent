@@ -9,9 +9,9 @@ export const cleanup = (dir: string, branch: string) => {
   run(`git branch -D ${branch}`, dir);
 };
 
-export const computeBranchDiff = (dir: string, branch: string): string => {
-  const base = run(`git merge-base main ${branch}`, dir).trim();
-  return run(`git diff ${base} ${branch}`, dir);
+export const computeBranchDiff = (dir: string, branch: string, base: string): string => {
+  const mergeBase = run(`git merge-base ${base} ${branch}`, dir).trim();
+  return run(`git diff ${mergeBase} ${branch}`, dir);
 };
 
 export const deriveBranchName = (type: string, slug: string): string => {
@@ -62,8 +62,16 @@ export const discardLastCommit = (dir: string, branch: string): void => {
   run(`git reset --hard HEAD~1`, dir); // undo the last commit + its changes
 };
 
-export const mergePlan = (dir: string, branch: string, push: boolean): { merged: boolean; pushed: boolean } => {
-  run(`git checkout main`, dir);
+export const mergePlan = (
+  dir: string,
+  branch: string,
+  base: string,
+  push: boolean,
+): { merged: boolean; pushed: boolean } => {
+  if (!branchExists(dir, branch)) {
+    return { merged: false, pushed: false };
+  }
+  run(`git checkout ${base}`, dir);
   run(`git merge ${branch}`, dir);
   run(`git branch -d ${branch}`, dir);
   if (!push) return { merged: true, pushed: false };
@@ -72,12 +80,14 @@ export const mergePlan = (dir: string, branch: string, push: boolean): { merged:
     run(`git push`, dir);
     pushed = true;
   } catch {
-    /* push is best-effort; report not-pushed */
+    /* best-effort */
   }
   return { merged: true, pushed };
 };
 
-export const discardBranch = (dir: string, branch: string): void => {
-  run(`git checkout main`, dir);
-  run(`git branch -D ${branch}`, dir);
+export const discardBranch = (dir: string, branch: string, base: string): void => {
+  run(`git checkout ${base}`, dir);
+  if (branchExists(dir, branch)) {
+    run(`git branch -D ${branch}`, dir);
+  }
 };
