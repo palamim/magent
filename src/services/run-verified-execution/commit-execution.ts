@@ -7,13 +7,9 @@ export const commitExecution = (dir: string, refinements: string[], task: Task):
   if (!staged) return false;
 
   const subject = `${task.type}: ${task.description}`;
-  const coAuthor = `Co-Authored-By: Magent <magent@noreply.local>`;
-  const taskTrailer = `Magent-Task-Id: ${task.id}`;
+  const trailers = `Magent-Task-Id: ${task.id}\nCo-Authored-By: Magent <magent@noreply.local>`;
   const commitFlag = refinements.length === 0 ? '' : '--amend';
 
-  run(
-    `git commit ${commitFlag} -m ${JSON.stringify(subject)} -m ${JSON.stringify(coAuthor)} -m ${JSON.stringify(taskTrailer)}`,
-    dir,
-  );
+  run(`git commit ${commitFlag} -m ${JSON.stringify(subject)} -m ${JSON.stringify(trailers)}`, dir);
   return true;
 };
