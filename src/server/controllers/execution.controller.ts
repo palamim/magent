@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from '@/lib/anthropic';
 
 import { collectProjectFiles } from '@/lib/files';
 import { executeTask } from '@/services/run-execution.service';
@@ -25,11 +25,10 @@ export const handleExecute = async (req: Request, res: Response) => {
     ensureProjectInitialized(dir);
     checkGitPreconditions(dir);
 
-    const client = new Anthropic();
     const files = collectProjectFiles(dir);
     const fileList = files.join('\n');
 
-    const result = await executeTask(task, client, dir, refinements, fileList, dependencies, branch);
+    const result = await executeTask(task, anthropic, dir, refinements, fileList, dependencies, branch);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

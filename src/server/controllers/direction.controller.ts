@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from '@/lib/anthropic';
 
 import { collectProjectFiles } from '@/lib/files';
 import { runDirector } from '@/agents/director/director.agent';
@@ -21,11 +21,10 @@ export const handleDirection = async (req: Request, res: Response) => {
     ensureProjectInitialized(dir);
     checkGitPreconditions(dir);
 
-    const client = new Anthropic();
     const files = collectProjectFiles(dir);
     const fileList = files.join('\n');
 
-    const proposal = await runDirector(fileList, client, dir);
+    const proposal = await runDirector(fileList, anthropic, dir);
 
     const currentDirection = loadDirection(dir);
     const currentConventions = loadConventions(dir);
