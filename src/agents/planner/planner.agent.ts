@@ -78,7 +78,8 @@ export const runPlanner = async (fileList: string, client: Anthropic, dir: strin
   writePlan(dir, plan);
 
   if (allDone(plan)) {
-    archivePlan(dir, plan);
+    // DON'T archive/clear the plan here — the branch still needs merging.
+    // Leave the plan active, all-done; the user merges (finishPlan) or abandons, which archives.
     clearTask(dir);
     return { kind: 'feature-complete', goal: plan.goal };
   }

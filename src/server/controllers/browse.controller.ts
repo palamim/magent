@@ -1,7 +1,7 @@
+import type { Request, Response } from 'express';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import type { Request, Response } from 'express';
 
 export const handleBrowse = (req: Request, res: Response) => {
   try {

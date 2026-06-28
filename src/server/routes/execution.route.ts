@@ -5,9 +5,11 @@ import { handleKeepExecution } from '@/server/controllers/keep-execution.control
 import { handleDiscardExecution } from '@/server/controllers/discard-execution.controller';
 import { handleInspectExecution } from '@/server/controllers/inspect.controller';
 import { handleTaskState } from '@/server/controllers/task-state.controller';
+import { handleBranchDiff } from '@/server/controllers/branch-diff.controller';
 
 export const executionRouter = Router();
 
+executionRouter.get('/branch-diff', handleBranchDiff);
 executionRouter.get('/task-state', handleTaskState);
 
 executionRouter.post('/execute', handleExecute);

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { Agent, type Task } from '@/agents/types/common.types';
 import { agentFilePath, ensureAgentDir } from '@/project/agent-files';
+import { run } from '@/lib/git';
 
 const TASK_FILE = 'task.json';
 const ARCHIVE_DIR = 'archive';
@@ -31,4 +32,15 @@ export const archiveTask = (dir: string, task: Task): void => {
 export const clearTask = (dir: string): void => {
   const activePath = agentFilePath(dir, Agent.EXECUTOR, TASK_FILE);
   if (existsSync(activePath)) rmSync(activePath);
+};
+
+export const isTaskDeciding = (dir: string, branch: string, task: Task): boolean => {
+  try {
+    const lastBody = run(`git log -1 --format=%B ${branch}`, dir);
+    const subject = `${task.type}: ${task.description}`;
+    const idTrailer = `Magent-Task-Id: ${task.id}`;
+    return lastBody.includes(subject) && lastBody.includes(idTrailer);
+  } catch {
+    return false;
+  }
 };

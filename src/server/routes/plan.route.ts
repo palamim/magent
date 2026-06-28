@@ -8,8 +8,9 @@ import { handleAbandonPlan } from '@/server/controllers/abandon-plan.controller'
 
 export const planRouter = Router();
 
+planRouter.get('/plan-state', handlePlanState);
+
 planRouter.post('/plan', handlePlan);
 planRouter.post('/refine-plan', handleRefinePlan);
-planRouter.get('/plan-state', handlePlanState);
 planRouter.post('/finish-plan', handleFinishPlan);
 planRouter.post('/abandon-plan', handleAbandonPlan);
