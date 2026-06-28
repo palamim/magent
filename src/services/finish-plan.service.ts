@@ -6,7 +6,7 @@ import { Agent, Decision } from '@/agents/types/common.types';
 
 export const finishPlan = (dir: string, push: boolean, comment: string): { merged: boolean; pushed: boolean } => {
   const plan = loadPlan(dir);
-  if (!plan) throw new Error('No active plan to finish.');
+  if (!plan) return { merged: false, pushed: false };
   const branch = deriveBranchName(plan.type, plan.slug);
   const result = mergePlan(dir, branch, push);
   saveFeedback(dir, Agent.PLANNER, {
