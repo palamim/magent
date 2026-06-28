@@ -11,13 +11,13 @@ files, and runs git. The interface is a hosted web app that talks to your local 
 
 ## Quickstart
 
-\`\`\`bash
+```
 git clone https://github.com/palamim/magent
 cd magent
 npm install
 cp .env.example .env # then add your Anthropic API key to .env as ANTHROPIC_API_KEY
 npm run server # serves on http://localhost:7842
-\`\`\`
+```
 
 Then open the UI at **[Magent](https://magentweb.netlify.app/)**, and click **Retry connection**. Your browser
 will ask to allow access to your local network — click **Allow**. That's it.
