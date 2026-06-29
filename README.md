@@ -19,7 +19,7 @@ cp .env.example .env # then add your Anthropic API key to .env as ANTHROPIC_API_
 npm run server # serves on http://localhost:7842
 ```
 
-Then open the UI at **[Magent](https://magentweb.netlify.app/)**, and click **Retry connection**. Your browser
+Then open the UI at **[Magent](https://www.getmagent.com/)**, and click **Retry connection**. Your browser
 will ask to allow access to your local network — click **Allow**. That's it.
 
 ## What you need
@@ -68,4 +68,4 @@ from and whether it **auto-pushes** to your remote — both from the Settings pa
 
 - [X](https://x.com/leopalamim)
 - [Blog](https://palamim.com/)
-- [Agent Patterns](https://agentpatterns.netlify.app/)
+- [Agent Patterns](https://getagentpatterns.com/)
