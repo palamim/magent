@@ -6,7 +6,7 @@ import { executeSubmitExecution, submitExecutionTool } from '@/agents/tools/subm
 import { readFileTool } from '@/agents/tools/read-file.tool';
 import type { Execution } from '@/agents/executor/executor.types';
 
-const MAX_EXECUTOR_STEPS = 3;
+const MAX_EXECUTOR_STEPS = 5;
 const MAX_EXECUTOR_TOKENS = 16384;
 
 export const runExecutor = async (client: Anthropic, prompt: string, dir: string): Promise<Execution> => {
