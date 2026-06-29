@@ -1,12 +1,12 @@
 # Magent
 
-**Set the direction. Magent plans and builds toward it.**
+**The direction layer for agentic coding.**
 
-Magent is an agentic coding tool with a direction layer. You tell it where the project
-should go; a Director agent sets the frontier, a Planner turns it into concrete tasks, and
-an Executor implements them — each step reviewed and approved by you.
+Magent is the direction layer for AI coding. It proposes the direction your project
+should move toward and orchestrates agents that build it, while you supervise, approving,
+sharpening, and giving feedback the agents learn from.
 
-This repo is the **brain** — it runs locally on your machine, reads and edits your project's
+This repo is the **brain**. It runs locally on your machine, reads and edits your project's
 files, and runs git. The interface is a hosted web app that talks to your local brain.
 
 ## Quickstart
