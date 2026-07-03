@@ -9,7 +9,7 @@ import { Agent, TaskStatus, type Plan, type Task } from '@/agents/types/common.t
 import { loadFeedback } from '@/project/feedback';
 import { loadDirection } from '@/project/direction';
 import { loadConventions } from '@/project/conventions';
-import { loadPlan, writePlan, archivePlan } from '@/project/plan';
+import { loadPlan, writePlan } from '@/project/plan';
 import { writeTask, clearTask } from '@/project/task';
 
 const MAX_PLANNER_STEPS = 10;
@@ -24,21 +24,60 @@ const nextPendingTask = (plan: Plan): Task | null => {
 
 export type PlanResponse = { kind: 'task' } | { kind: 'feature-complete'; goal: string };
 
-const runModelLoop = async (prompt: string, client: Anthropic, dir: string): Promise<Plan> => {
+// planner.agent.ts
+
+export interface PlannerRunResult {
+  plan: Plan;
+  steps: number;
+  toolCalls: number;
+  readFileCalls: number;
+  filesRead: string[];
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export const runModelLoop = async (
+  prompt: string,
+  client: Anthropic,
+  dir: string,
+  model: string,
+): Promise<PlannerRunResult> => {
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
   let steps = 0;
+  let toolCalls = 0;
+  let readFileCalls = 0;
+  const filesRead: string[] = [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+
   while (steps < MAX_PLANNER_STEPS) {
     steps++;
     const message = await client.messages.create({
       max_tokens: MAX_PLANNER_TOKENS,
-      model: ANTHROPIC_MODELS.CLAUDE_HAIKU_4_5,
+      model,
       tools: [readFileTool, submitPlanTool],
       messages,
     });
+    inputTokens += message.usage.input_tokens;
+    outputTokens += message.usage.output_tokens;
     messages.push({ role: 'assistant', content: message.content });
 
+    // instrument tool calls
+    for (const block of message.content) {
+      if (block.type === 'tool_use') {
+        toolCalls++;
+        if (block.name === 'read_file') {
+          readFileCalls++;
+          const path = (block.input as { path?: string }).path;
+          if (path) filesRead.push(path);
+        }
+      }
+    }
+
     const submitted = readSubmitPlan(message);
-    if (submitted) return submitted;
+    if (submitted) {
+      return { plan: submitted, steps, toolCalls, readFileCalls, filesRead, inputTokens, outputTokens };
+    }
 
     if (message.stop_reason !== 'tool_use') {
       throw new Error('Planner stopped without calling submit_plan.');
@@ -58,7 +97,7 @@ export const runPlanner = async (fileList: string, client: Anthropic, dir: strin
   if (!existing) {
     const direction = loadDirection(dir);
     const prompt = freshPlanPrompt(direction, fileList, conventions, plannerFeedback, executorFeedback);
-    const plan = await runModelLoop(prompt, client, dir);
+    const { plan } = await runModelLoop(prompt, client, dir, ANTHROPIC_MODELS.CLAUDE_HAIKU_4_5);
     writePlan(dir, plan);
     const next = nextPendingTask(plan);
     if (!next) throw new Error('Fresh plan has no pending tasks.');
@@ -74,7 +113,7 @@ export const runPlanner = async (fileList: string, client: Anthropic, dir: strin
     plannerFeedback,
     executorFeedback,
   );
-  const plan = await runModelLoop(prompt, client, dir);
+  const { plan } = await runModelLoop(prompt, client, dir, ANTHROPIC_MODELS.CLAUDE_HAIKU_4_5);
   writePlan(dir, plan);
 
   if (allDone(plan)) {
