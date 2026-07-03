@@ -12,7 +12,7 @@ import { loadConventions } from '@/project/conventions';
 import { loadPlan, writePlan } from '@/project/plan';
 import { writeTask, clearTask } from '@/project/task';
 
-const MAX_PLANNER_STEPS = 10;
+const MAX_PLANNER_STEPS = 15;
 const MAX_PLANNER_TOKENS = 4096;
 
 const allDone = (plan: Plan): boolean => plan.tasks.every((t) => t.status === TaskStatus.DONE);
