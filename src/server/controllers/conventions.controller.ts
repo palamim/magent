@@ -15,8 +15,8 @@ export const handleConventions = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing dir.' });
     }
 
-    ensureProjectInitialized(dir);
     checkGitPreconditions(dir);
+    ensureProjectInitialized(dir);
 
     const files = collectProjectFiles(dir);
     const fileList = files.join('\n');
