@@ -12,6 +12,7 @@ const MAX_ARCHITECT_TOKENS = 8192;
 
 export const runArchitect = async (client: Anthropic, dir: string, fileList: string): Promise<ArchitectResult> => {
   const prompt = conventionsPrompt(fileList);
+  const model = ANTHROPIC_MODELS.CLAUDE_SONNET_4_6;
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
   let steps = 0;
   let toolCalls = 0;
@@ -25,7 +26,7 @@ export const runArchitect = async (client: Anthropic, dir: string, fileList: str
 
     const message = await client.messages.create({
       max_tokens: MAX_ARCHITECT_TOKENS,
-      model: ANTHROPIC_MODELS.CLAUDE_SONNET_4_6,
+      model: model,
       tools: [readFileTool, submitConventionsTool],
       messages,
     });
@@ -51,6 +52,8 @@ export const runArchitect = async (client: Anthropic, dir: string, fileList: str
     if (submitBlock) {
       return executeSubmitConventions(
         submitBlock.input,
+        model,
+        prompt,
         steps,
         toolCalls,
         readFileCalls,

@@ -20,6 +20,8 @@ export const submitConventionsTool: Anthropic.Tool = {
 
 export const executeSubmitConventions = (
   input: unknown,
+  model: string,
+  prompt: string,
   steps: number,
   toolCalls: number,
   readFileCalls: number,
@@ -30,6 +32,8 @@ export const executeSubmitConventions = (
   const data = input as Partial<ArchitectResult>;
   return {
     conventions: data.conventions ?? '',
+    model,
+    prompt,
     steps,
     toolCalls,
     readFileCalls,
