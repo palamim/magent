@@ -1,6 +1,6 @@
 {
   "name": "magent",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "The direction layer for agentic coding. The Director sets direction, the Planner turns it into tasks, the Executor builds.",
   "license": "ISC",
   "author": "Palamim",
