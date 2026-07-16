@@ -1,10 +1,9 @@
 # Magent
 
-**The direction layer for agentic coding.**
+**A human-centered agentic coding tool.**
 
-Magent is the direction layer for AI coding. It proposes the direction your project
-should move toward and orchestrates agents that build it, while you supervise, approving,
-sharpening, and giving feedback the agents learn from.
+Magent turns your intent into a plan, then orchestrates agents that build it — while you
+stay in the loop, reviewing and approving as it goes.
 
 This repo is the **brain**. It runs locally on your machine, reads and edits your project's
 files, and runs git. The interface is a hosted web app that talks to your local brain.
@@ -30,33 +29,22 @@ will ask to allow access to your local network — click **Allow**. That's it.
 
 ## How it works
 
-Magent runs three agents, each working at a higher altitude than the last:
+Magent runs two agents:
 
-- **Director** — sets the project's direction: one inexhaustible frontier, a direction of
-  travel rather than a checklist. It reads your project's intent (an optional `MAGENT.md`)
-  and what's been built, and writes the direction the Planner follows.
-- **Planner** — turns the current direction into a concrete plan: a feature broken into a
-  sequence of tasks.
-- **Executor** — implements the plan one task at a time, committing each task to a single
-  feature branch.
+- **Planner** — turns your intent into a concrete plan broken into a sequence of tasks.
+- **Executor** — implements the plan one task at a time, committing each task to a separate branch.
 
-You review and approve at each level — the direction, the plan, and every change the
-Executor makes. Work happens on a separate branch and only merges into your base branch
+You review and approve at each level — the plan, and every change the Executor makes.
+Work happens on a separate branch and only merges into your base branch
 when you decide it's done.
 
 ## Safety
 
 - The brain runs **entirely on your machine**. Your code never leaves your computer.
-- Magent works on a **separate feature branch**, cut from a base branch you choose
+- Magent works on a **separate branch**, cut from a base branch you choose
   (`main`, `master`, `dev`, or any branch). It only merges back when you approve.
 - It does **not** push to your remote unless you turn that on.
 - This repo is open source — read exactly what it does before you run it.
-
-## Setting direction (optional)
-
-Magent works without setup, but it proposes sharper direction when your project has a
-`MAGENT.md` in its root. See `MAGENT.example.md` for the shape — copy it, fill it in,
-and the Director reads it. You don't need one to start.
 
 ## Configuration
 
@@ -66,6 +54,7 @@ from and whether it **auto-pushes** to your remote — both from the Settings pa
 
 ## Links
 
+- [Magent UI](https://www.getmagent.com/)
 - [X](https://x.com/leopalamim)
 - [Blog](https://palamim.com/)
 - [Agent Patterns](https://getagentpatterns.com/)

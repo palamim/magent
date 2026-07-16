@@ -25,7 +25,6 @@ When you're ready for Magent to do meaningful work, set a real direction with th
 
 export const ensureProjectInitialized = (dir: string): void => {
   ensureGitignored(dir);
-  ensureStarterDirection(dir);
   ensureConfig(dir);
 };
 
@@ -34,6 +33,7 @@ const ensureConfig = (dir: string): void => {
   if (!existsSync(path)) writeConfig(dir, loadConfig(dir));
 };
 
+// DEPRECATED
 const ensureStarterDirection = (dir: string): void => {
   if (loadDirection(dir) === '(none)') {
     writeDirection(dir, STARTER_DIRECTION);

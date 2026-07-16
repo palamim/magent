@@ -6,4 +6,4 @@
  */
 
 // ── the agent: run the executor once, get an Execution back ──
-export { runPlanner } from './planner.agent';
+export { runPlanner, runModelLoop, type PlanResponse, type PlannerRunResult } from './planner.agent';

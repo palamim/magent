@@ -36,7 +36,6 @@ export interface Task {
 
 // the Planner's persistent multi-run plan (lives in planner/plan.json)
 export interface Plan {
-  frontier: string; // the slice of direction.md this plan serves (so we know when to replan)
   goal: string; // one-line: what this whole plan achieves
   type: string; // feat/fix/etc for the eventual commits
   slug: string; // kebab, for branch/commit naming

@@ -8,9 +8,9 @@ import { ensureProjectInitialized } from '@/project/init';
 
 export const handlePlan = async (req: Request, res: Response) => {
   try {
-    const { dir } = req.body as { dir?: string };
-    if (!dir) {
-      return res.status(400).json({ error: 'Missing "dir" — the project path to run Magent in.' });
+    const { dir, userIntent } = req.body as { dir?: string; userIntent?: string };
+    if (!dir || !userIntent) {
+      return res.status(400).json({ error: 'Missing dir or userIntent.' });
     }
 
     ensureProjectInitialized(dir);
@@ -19,7 +19,7 @@ export const handlePlan = async (req: Request, res: Response) => {
     const files = collectProjectFiles(dir);
     const fileList = files.join('\n');
 
-    const result = await runPlanner(fileList, anthropic, dir);
+    const result = await runPlanner(anthropic, dir, fileList, userIntent);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

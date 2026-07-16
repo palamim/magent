@@ -6,7 +6,6 @@ export const readSubmitPlan = (message: Anthropic.Messages.Message): Plan | null
   if (!toolUse || toolUse.type !== 'tool_use') return null;
 
   const input = toolUse.input as {
-    frontier?: string;
     goal?: string;
     type?: string;
     slug?: string;
@@ -15,7 +14,6 @@ export const readSubmitPlan = (message: Anthropic.Messages.Message): Plan | null
   };
 
   return {
-    frontier: input.frontier ?? '',
     goal: input.goal ?? '',
     type: input.type ?? 'chore',
     slug: input.slug ?? 'untitled',

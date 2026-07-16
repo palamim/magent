@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { runModelLoop, type PlannerRunResult } from '@/agents/planner/planner.agent';
+import { runModelLoop, type PlannerRunResult } from '@/agents/planner';
 
 export interface GeneratePlanInput {
   prompt: string;

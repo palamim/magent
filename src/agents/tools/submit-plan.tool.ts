@@ -3,15 +3,14 @@ import type Anthropic from '@anthropic-ai/sdk';
 export const submitPlanTool: Anthropic.Tool = {
   name: 'submit_plan',
   description:
-    'Submit the finalized plan for the current feature. Call this exactly once when the plan ' +
-    'is complete. In fresh mode, this is the new plan. In advance mode, this is the updated plan ' +
-    'with task statuses re-grounded against the codebase. Number tasks sequentially in execution ' +
-    'order — the system runs the lowest-numbered pending task next.',
+    'Submit the finalized plan. Call this exactly once when the plan is complete. In fresh mode, ' +
+    'this is the new plan. In advance mode, this is the updated plan with task statuses re-grounded ' +
+    'against the codebase. Number tasks sequentially in execution order — the system runs the ' +
+    'lowest-numbered pending task next.',
   input_schema: {
     type: 'object',
     properties: {
-      frontier: { type: 'string', description: 'The slice of the direction this plan serves (one line).' },
-      goal: { type: 'string', description: 'One line: what this whole plan (one feature) achieves.' },
+      goal: { type: 'string', description: 'One line: what this whole plan achieves.' },
       type: {
         type: 'string',
         description:
@@ -24,7 +23,7 @@ export const submitPlanTool: Anthropic.Tool = {
       tasks: {
         type: 'array',
         description:
-          'The tasks, in execution order. Each is one executor run (one commit). A small feature may have one task.',
+          'The tasks, in execution order. Each is one executor run (one commit). A small plan may have one task.',
         items: {
           type: 'object',
           properties: {
@@ -59,9 +58,10 @@ export const submitPlanTool: Anthropic.Tool = {
         type: 'array',
         items: { type: 'string' },
         description:
-          'npm packages this feature requires that are not already installed (e.g. ["highlight.js"]). Installed automatically before execution — do NOT create tasks to install them. Empty array if none.',
+          'npm packages this plan requires that are not already installed (e.g. ["highlight.js"]). Installed ' +
+          'automatically before execution — do NOT create tasks to install them. Empty array if none.',
       },
     },
-    required: ['frontier', 'goal', 'type', 'slug', 'tasks', 'dependencies'],
+    required: ['goal', 'type', 'slug', 'tasks', 'dependencies'],
   },
 };

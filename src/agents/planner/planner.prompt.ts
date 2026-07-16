@@ -1,18 +1,13 @@
-export const freshPlanPrompt = (
-  direction: string,
+export const planPrompt = (
+  userIntent: string,
   fileList: string,
-  conventions: string,
-  plannerFeedback: string,
-  executorFeedback: string,
-): string => `You are the Planner. The DIRECTION below is the current frontier, set by the
-Director — a strategic intent that spans roughly weeks and contains MULTIPLE possible features.
+): string => `You are the Planner. The USER INTENT below is what the user wants built. Your job:
+break that intent into executor-sized tasks, grounded in the real codebase.
 
-Your job: extract the SINGLE next feature that best moves toward this frontier right now, and
-break THAT ONE feature into executor-sized tasks. This plan is for one feature — not the whole
-frontier. A small feature may be a single task; a larger one several tasks. The builder will run
-you again for the NEXT feature when this one is done.
+The user's intent is the full scope of this plan — decompose all of it. A small intent may be
+a single task; a larger one several tasks.
 
-Break the feature into tasks sized for a single Executor run. The right size is one coherent,
+Break the intent into tasks sized for a single Executor run. The right size is one coherent,
 self-contained change — typically 1-3 files, but file count is not the test. The real test is
 distinct deliverables: if a task asks for several separable things (e.g. a layout, its styling,
 its data-wiring, and extracted sub-components), that is several tasks, even if they touch the
@@ -21,7 +16,7 @@ Conversely, do not split a single coherent change into artificial fragments. Aim
 tasks where each is one whole, reviewable deliverable — not so coarse that a task bundles many
 sub-goals, not so fine that you fragment one change into busywork.
 
-If the feature needs npm packages that aren't already installed, list them in the plan's
+If the intent needs npm packages that aren't already installed, list them in the plan's
 "dependencies" field — they are installed automatically before execution. Do NOT create a task
 to install them. Sequence the actual work tasks so dependencies of logic come first
 (e.g. "create the renderer", then "wire it in").
@@ -30,31 +25,16 @@ Read whatever files you need (read_file) to ground the plan in the real codebase
 is ready, call submit_plan. Every task starts "pending". Give each task a short, descriptive
 kebab-case slug (e.g. create-post-navigation) — it names the task's branch and commit.
 
---- DIRECTION (the frontier, set by the Director) ---
-${direction}
+--- USER INTENT (what the user wants built) ---
+${userIntent}
 
 --- FILE LIST ---
-${fileList}
-
---- CONVENTIONS (how code must be written in this project) ---
-The executor will follow these. Propose tasks that fit them.
-${conventions}
-
---- YOUR FEEDBACK (past plans and how the builder reacted) ---
-Use this to match the builder's taste and avoid re-proposing discarded work.
-${plannerFeedback}
-
---- EXECUTOR FEEDBACK (how past executions went) ---
-If past executions needed many refinements, spec tasks more tightly.
-${executorFeedback}`;
+${fileList}`;
 
 export const advancePrompt = (
-  planJson: string,
+  currentPlan: string,
   fileList: string,
-  conventions: string,
-  plannerFeedback: string,
-  executorFeedback: string,
-): string => `You are the Planner, mid-feature. A PLAN you made earlier is below as JSON — its
+): string => `You are the Planner, mid-plan. A PLAN you made earlier is below as JSON — its
 tasks marked "done" or "pending". The Executor has been working through it, one task per run,
 each reviewed by the builder. Your job: re-ground the plan against the ACTUAL codebase and
 advance it by one task.
@@ -88,16 +68,7 @@ them only if strictly necessary. You should usually finish in one pass.
 When done, call submit_plan with the UPDATED full plan.
 
 --- THE CURRENT PLAN (your earlier work, with done/pending status) ---
-${planJson}
+${currentPlan}
 
 --- FILE LIST ---
-${fileList}
-
---- CONVENTIONS ---
-${conventions}
-
---- YOUR FEEDBACK ---
-${plannerFeedback}
-
---- EXECUTOR FEEDBACK ---
-${executorFeedback}`;
+${fileList}`;

@@ -3,12 +3,9 @@ import { ANTHROPIC_MODELS } from '@/agents/models';
 import { readFileTool } from '@/agents/tools/read-file.tool';
 import { submitPlanTool } from '@/agents/tools/submit-plan.tool';
 import { dispatchToolCalls } from '@/agents/tools/dispatch';
-import { freshPlanPrompt, advancePrompt } from '@/agents/planner/planner.prompt';
+import { planPrompt, advancePrompt } from '@/agents/planner/planner.prompt';
 import { readSubmitPlan } from '@/agents/planner/utils/read-submit-plan';
-import { Agent, TaskStatus, type Plan, type Task } from '@/agents/types/common.types';
-import { loadFeedback } from '@/project/feedback';
-import { loadDirection } from '@/project/direction';
-import { loadConventions } from '@/project/conventions';
+import { TaskStatus, type Plan, type Task } from '@/agents/types/common.types';
 import { loadPlan, writePlan } from '@/project/plan';
 import { writeTask, clearTask } from '@/project/task';
 
@@ -22,9 +19,7 @@ const nextPendingTask = (plan: Plan): Task | null => {
   return pending.sort((a, b) => a.id - b.id)[0] ?? null;
 };
 
-export type PlanResponse = { kind: 'task' } | { kind: 'feature-complete'; goal: string };
-
-// planner.agent.ts
+export type PlanResponse = { kind: 'task' } | { kind: 'plan-complete'; goal: string };
 
 export interface PlannerRunResult {
   plan: Plan;
@@ -87,16 +82,17 @@ export const runModelLoop = async (
   throw new Error('Planner ended loop without submitting a plan (hit MAX_PLANNER_STEPS).');
 };
 
-export const runPlanner = async (fileList: string, client: Anthropic, dir: string): Promise<PlanResponse> => {
-  const conventions = loadConventions(dir);
-  const plannerFeedback = loadFeedback(dir, Agent.PLANNER);
-  const executorFeedback = loadFeedback(dir, Agent.EXECUTOR);
+export const runPlanner = async (
+  client: Anthropic,
+  dir: string,
+  fileList: string,
+  userIntent: string,
+): Promise<PlanResponse> => {
   const existing = loadPlan(dir);
 
-  // FRESH MODE — no active plan: extract the next feature, break it into tasks
+  // PLAN MODE — no active plan: turn user intent into a plan with tasks
   if (!existing) {
-    const direction = loadDirection(dir);
-    const prompt = freshPlanPrompt(direction, fileList, conventions, plannerFeedback, executorFeedback);
+    const prompt = planPrompt(userIntent, fileList);
     const { plan } = await runModelLoop(prompt, client, dir, ANTHROPIC_MODELS.CLAUDE_HAIKU_4_5);
     writePlan(dir, plan);
     const next = nextPendingTask(plan);
@@ -106,13 +102,8 @@ export const runPlanner = async (fileList: string, client: Anthropic, dir: strin
   }
 
   // ADVANCE MODE — re-ground the existing plan, mark done, pick next
-  const prompt = advancePrompt(
-    JSON.stringify(existing, null, 2),
-    fileList,
-    conventions,
-    plannerFeedback,
-    executorFeedback,
-  );
+  const currentPlan = JSON.stringify(existing, null, 2);
+  const prompt = advancePrompt(currentPlan, fileList);
   const { plan } = await runModelLoop(prompt, client, dir, ANTHROPIC_MODELS.CLAUDE_HAIKU_4_5);
   writePlan(dir, plan);
 
@@ -120,7 +111,7 @@ export const runPlanner = async (fileList: string, client: Anthropic, dir: strin
     // DON'T archive/clear the plan here — the branch still needs merging.
     // Leave the plan active, all-done; the user merges (finishPlan) or abandons, which archives.
     clearTask(dir);
-    return { kind: 'feature-complete', goal: plan.goal };
+    return { kind: 'plan-complete', goal: plan.goal };
   }
 
   const next = nextPendingTask(plan);
