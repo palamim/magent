@@ -6,9 +6,8 @@ export const submitDirectionTool: Anthropic.Tool = {
   name: 'submit_direction',
   description:
     'Submit your proposed direction. Provide the rationale, the full new content for ' +
-    'direction.md (what the planner should pursue next), and the full new content for ' +
-    'conventions.md (how the executor should code). Both documents are written in full — ' +
-    'they replace the current versions, so include everything that should remain, not just changes.',
+    'direction.md. The document is written in full — it replaces the current version, ' +
+    'so include everything that should remain, not just changes.',
   input_schema: {
     type: 'object',
     properties: {
@@ -21,12 +20,8 @@ export const submitDirectionTool: Anthropic.Tool = {
         description:
           'The full new content for direction.md — the current frontier: the single most important direction of travel for the project right now, argued with reasoning and boundaries. Not a list of features.',
       },
-      conventions: {
-        type: 'string',
-        description: 'The full new content for conventions.md — the coding conventions for the executor.',
-      },
     },
-    required: ['rationale', 'direction', 'conventions'],
+    required: ['rationale', 'direction'],
   },
 };
 
@@ -35,6 +30,5 @@ export const executeSubmitDirection = (input: unknown): DirectionProposal => {
   return {
     rationale: data.rationale ?? '',
     direction: data.direction ?? '',
-    conventions: data.conventions ?? '',
   };
 };

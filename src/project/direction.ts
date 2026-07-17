@@ -5,12 +5,12 @@ import { agentFilePath, ensureAgentDir } from '@/project/agent-files';
 const DIRECTION_FILE = 'direction.md';
 
 export const loadDirection = (dir: string): string => {
-  const path = agentFilePath(dir, Agent.PLANNER, DIRECTION_FILE);
+  const path = agentFilePath(dir, Agent.DIRECTOR, DIRECTION_FILE);
   if (!existsSync(path)) return '(none)';
   return readFileSync(path, 'utf-8');
 };
 
 export const writeDirection = (dir: string, content: string): void => {
-  ensureAgentDir(dir, Agent.PLANNER);
-  writeFileSync(agentFilePath(dir, Agent.PLANNER, DIRECTION_FILE), content, 'utf8');
+  ensureAgentDir(dir, Agent.DIRECTOR);
+  writeFileSync(agentFilePath(dir, Agent.DIRECTOR, DIRECTION_FILE), content, 'utf8');
 };

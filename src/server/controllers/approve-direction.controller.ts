@@ -4,27 +4,16 @@ import { approveDirection } from '@/services/approve-direction.service';
 
 export const handleApproveDirection = (req: Request, res: Response) => {
   try {
-    const {
-      dir,
-      rationale,
-      direction,
-      conventions,
-      refinements = [],
-      comment = '',
-    } = req.body as {
+    const { dir, direction } = req.body as {
       dir?: string;
-      rationale?: string;
       direction?: string;
-      conventions?: string;
-      refinements: string[];
-      comment?: string;
     };
 
-    if (!dir || !rationale || !direction || !conventions) {
-      return res.status(400).json({ error: 'Missing dir, rationale, direction or conventions.' });
+    if (!dir || !direction) {
+      return res.status(400).json({ error: 'Missing dir or direction.' });
     }
 
-    const result = approveDirection(dir, rationale, direction, conventions, refinements, comment);
+    const result = approveDirection(dir, direction);
     return res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

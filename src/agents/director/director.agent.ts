@@ -6,32 +6,15 @@ import { dispatchToolCalls } from '@/agents/tools/dispatch';
 import { directorPrompt } from '@/agents/director/director.prompt';
 import type { DirectionProposal } from '@/agents/director/director.types';
 import { submitDirectionTool, executeSubmitDirection } from '@/agents/tools/submit-direction.tool';
-import { Agent } from '@/agents/types/common.types';
-import { loadFeedback } from '@/project/feedback';
 import { loadDirection } from '@/project/direction';
-import { loadConventions } from '@/project/conventions';
-import { loadMagentMd } from '@/project/magent-md';
 
 const MAX_DIRECTOR_STEPS = 12;
 const MAX_DIRECTOR_TOKENS = 8192;
 
 export const runDirector = async (fileList: string, client: Anthropic, dir: string): Promise<DirectionProposal> => {
-  const magentMd = loadMagentMd(dir);
   const currentDirection = loadDirection(dir);
-  const currentConventions = loadConventions(dir);
-  const plannerFeedback = loadFeedback(dir, Agent.PLANNER);
-  const executorFeedback = loadFeedback(dir, Agent.EXECUTOR);
-  const directorFeedback = loadFeedback(dir, Agent.DIRECTOR);
 
-  const prompt = directorPrompt(
-    magentMd,
-    currentDirection,
-    currentConventions,
-    plannerFeedback,
-    executorFeedback,
-    directorFeedback,
-    fileList,
-  );
+  const prompt = directorPrompt(currentDirection, fileList);
 
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: prompt }];
 

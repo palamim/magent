@@ -6,22 +6,6 @@ import { loadDirection, writeDirection } from '@/project/direction';
 import { loadConfig, writeConfig } from '@/project/config';
 
 const MAGENT_IGNORE = '.magent/';
-const STARTER_DIRECTION = `# direction.md
-
-## Starter frontier (replace this with your own via the Director)
-
-This is a starter direction so you can see Magent's loop work immediately. It is intentionally
-general. For Magent to propose genuinely good work, run the **Director** (in the Direct tab) to
-set a real frontier for *this* project — what it should become, and why.
-
-Until then, the frontier is: **small, safe, genuinely useful improvements grounded in the
-project's real state.** Look at what the project actually is, and propose the kind of modest,
-shippable improvement a careful engineer would make on a first pass — a real rough edge, a small
-quality or clarity improvement, a minor gap worth closing. Nothing structural, nothing risky,
-nothing that assumes context you don't have. One small, real, reviewable improvement.
-
-When you're ready for Magent to do meaningful work, set a real direction with the Director.
-`;
 
 export const ensureProjectInitialized = (dir: string): void => {
   ensureGitignored(dir);
@@ -31,13 +15,6 @@ export const ensureProjectInitialized = (dir: string): void => {
 const ensureConfig = (dir: string): void => {
   const path = join(dir, '.magent', 'config.json');
   if (!existsSync(path)) writeConfig(dir, loadConfig(dir));
-};
-
-// DEPRECATED
-const ensureStarterDirection = (dir: string): void => {
-  if (loadDirection(dir) === '(none)') {
-    writeDirection(dir, STARTER_DIRECTION);
-  }
 };
 
 const ensureGitignored = (dir: string): void => {
